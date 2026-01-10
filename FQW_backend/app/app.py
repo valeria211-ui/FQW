@@ -18,18 +18,31 @@ SCENARIO_FILES = {
 }
 
 def execute_sql_file(filepath):
-    """Выполняет SQL из файла"""
     if not os.path.exists(filepath):
-        print(f"Файл сценария не найден: {filepath}")
+        print(f"Файл не найден: {filepath}")
         return
+    
     conn = get_connection()
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         with open(filepath, "r") as f:
-            sql = f.read()
-            cur.execute(sql)
-    conn.commit()
-    conn.close()
-    print(f"Сценарий {filepath} выполнен!")
+            # Читаем и разделяем команды по точке с запятой
+            sql_content = f.read()
+            commands = sql_content.split(';')
+            
+            for command in commands:
+                clean_cmd = command.strip()
+                if clean_cmd:
+                    cur.execute(clean_cmd)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"🔥 Ошибка в SQL сценарии {filepath}: {e}")
+        # Выбрасываем исключение дальше, чтобы Flask показал его в логах
+        raise e 
+    finally:
+        cur.close()
+        conn.close()
 
 def prepare_database(scenario):
     """Подготавливает БД под заданный сценарий"""
