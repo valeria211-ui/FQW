@@ -11,9 +11,11 @@
   will-change: filter;
   transition: filter 300ms;
 }
+
 .logo:hover {
   filter: drop-shadow(0 0 2em #646cffaa);
 }
+
 .logo.react:hover {
   filter: drop-shadow(0 0 2em #61dafbaa);
 }
@@ -22,6 +24,7 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -39,4 +42,35 @@
 
 .read-the-docs {
   color: #888;
+}
+
+.layout {
+  width: 100%;
+  min-height: 100vh;
+  background-color: #f0f2f5;
+  margin: 0;
+  padding: 40px 0;
+  box-sizing: border-box;
+}
+
+.central-container {
+  max-width: 1200px;
+  width: 90%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 30px
+}
+
+.scenario-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.monitoring{
+  text-align: center; 
+  color: #1a1a1a;
+  font-weight: 800;
+  margin-bottom: 10px ;
 }
