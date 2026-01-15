@@ -3,7 +3,7 @@ import axios from "axios";
 import { ScenarioCards } from "./components/ScenarioCards";
 import { MetricsTable } from "./components/MetricsTable";
 import { MetricsGraph } from "./components/MetricsGraph";
-import "./App.css"; 
+import "./App.css";
 
 function App() {
   const [status, setStatus] = useState({
@@ -56,21 +56,39 @@ function App() {
 
   const getChartData = () => {
     const grouped = metrics.reduce((acc, m) => {
-      const shortName = m.query.includes("JOIN") ? "Complex Join" : m.query.includes("GROUP") ? "Aggregation" : "Point Query";
-      if (!acc[shortName]) acc[shortName] = { name: shortName };
+      const nameMap = {
+        point_user_by_email: "Point Query",
+        orders_aggregation: "Aggregation",
+        recent_orders_join: "Complex Join",
+      };
+
+      const shortName = nameMap[m.query] || m.query;
+
+      if (!acc[shortName]) {
+        acc[shortName] = { name: shortName };
+      }
+
       acc[shortName][m.scenario_type] = parseFloat(m.duration);
       return acc;
     }, {});
-    return Object.values(grouped);
+    const k = Object.keys;
+    const resArr = []
+for (const key in grouped) {
+  resArr.push({...grouped[key], name : key})
+}
+
+    return resArr
   };
+  
+  console.log("CHART DATA", getChartData());
 
   return (
     /* ВНЕШНЯЯ ОБОЛОЧКА */
     <div className="layout">
-      
+
       {/* ЦЕНТРАЛЬНЫЙ КОНТЕЙНЕР (ограничивает ширину и центрирует) */}
       <div className="central-container">
-        
+
         <h1 className="monitoring">
           📊 Мониторинг производительности БД
         </h1>
@@ -78,22 +96,22 @@ function App() {
         {/* КАРТОЧКИ СЦЕНАРИЕВ */}
         <div className="scenario-cards">
           {["Scenario1", "Scenario2", "Scenario3"].map((sc) => (
-            <ScenarioCards availableRuns ={availableRuns} setSelectedRunId={setSelectedRunId} runLoadTest={runLoadTest} fetchMetrics={fetchMetrics} status={status} sc={sc} selectedRunId={selectedRunId}/>
+            <ScenarioCards availableRuns={availableRuns} setSelectedRunId={setSelectedRunId} runLoadTest={runLoadTest} fetchMetrics={fetchMetrics} status={status} sc={sc} selectedRunId={selectedRunId} />
           ))}
         </div>
 
         {/* ГРАФИК */}
         {metrics.length > 0 && (
-          <MetricsGraph getChartData={getChartData}/>
+          <MetricsGraph getChartData={getChartData} />
         )}
 
         {/* ТАБЛИЦА */}
         {metrics.length > 0 && (
-          <MetricsTable metrics={metrics} selectedRunId={selectedRunId}/>
+          <MetricsTable metrics={metrics} selectedRunId={selectedRunId} />
         )}
 
-      </div> 
-    </div> 
+      </div>
+    </div>
   );
 }
 

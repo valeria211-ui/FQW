@@ -1,0 +1,17 @@
+[
+  {
+    "name": "point_user_by_email",
+    "type": "point",
+    "sql": "SELECT * FROM users WHERE email = 'user_50000@example.com';"
+  },
+  {
+    "name": "orders_aggregation",
+    "type": "aggregation",
+    "sql": "SELECT product_id, COUNT(*) FROM orders GROUP BY product_id ORDER BY COUNT(*) DESC;"
+  },
+  {
+    "name": "recent_orders_join",
+    "type": "join",
+    "sql": "SELECT u.username, o.order_id, p.name, o.total_price FROM orders o JOIN users u ON o.user_id = u.user_id JOIN products p ON o.product_id = p.product_id WHERE o.created_at > NOW() - INTERVAL '1 month';"
+  }
+]

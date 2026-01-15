@@ -2,12 +2,14 @@ import threading
 import time
 from db import get_connection, get_redis_client # Импортируем Redis
 from metrics import save_metric
+import os 
+import json
 
-TEST_QUERIES = [
-    "SELECT * FROM orders WHERE user_id = 1;",
-    "SELECT product_id, COUNT(*) FROM orders GROUP BY product_id ORDER BY COUNT(*) DESC;",
-    "SELECT u.user_id, COUNT(o.order_id) FROM users u JOIN orders o ON u.user_id=o.user_id GROUP BY u.user_id;"
-]
+QUERIES_FILE = os.path.join(os.path.dirname(__file__), "queries.json")
+
+with open(QUERIES_FILE, "r") as f:
+    QUERIES = json.load(f)
+
 
 NUM_THREADS = 3        
 REQUESTS_PER_THREAD = 3 
@@ -52,14 +54,20 @@ def run_query(query, scenario):
     conn.close()
     return duration_ms
 
-def simulate_user(scenario, run_id, query):
-    """Эмуляция пользователя с учетом сценария"""
-    # ТЕПЕРЬ передаем scenario в run_query
-    duration = run_query(query, scenario)
-    qps = 1000 / duration if duration > 0 else 0
-    print(f"[{scenario}] Query executed in {duration:.2f} ms")
-    
-    save_metric(scenario, run_id, query, duration, qps)
+def simulate_user(scenario, run_id, query_obj):
+    try:
+        sql = query_obj["sql"]
+        query_name = query_obj["name"]
+
+        duration = run_query(sql, scenario)
+        qps = 1000 / duration if duration > 0 else 0
+
+        print(f"[{scenario}] {query_name}: {duration:.2f} ms")
+
+        save_metric(scenario, run_id, query_name, duration, qps)
+
+    except Exception as e:
+        print(f"[ERROR] {query_obj['name']}: {e}")
 
 def worker(scenario, run_id, queries):
     for query in queries:
@@ -68,10 +76,9 @@ def worker(scenario, run_id, queries):
 def run_load_test(scenario="Scenario1", run_id=None):
     if run_id is None:
         run_id = str(int(time.time()))
-    
+
     threads = []
-    
-    # Перед 3-м сценарием полезно очистить кэш, чтобы замеры были честными
+
     if scenario == "Scenario3" and r_client:
         try:
             r_client.flushdb()
@@ -81,7 +88,11 @@ def run_load_test(scenario="Scenario1", run_id=None):
     for i in range(NUM_THREADS):
         t = threading.Thread(
             target=worker,
-            args=(scenario, run_id, [TEST_QUERIES[j % len(TEST_QUERIES)] for j in range(REQUESTS_PER_THREAD)])
+            args=(
+                scenario,
+                run_id,
+                [QUERIES[j % len(QUERIES)] for j in range(REQUESTS_PER_THREAD)]
+            )
         )
         t.start()
         threads.append(t)
