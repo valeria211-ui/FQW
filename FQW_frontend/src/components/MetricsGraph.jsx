@@ -3,7 +3,7 @@ import {
   ResponsiveContainer, Legend, LineChart, Line 
 } from 'recharts';
 
-export const MetricsGraph = ({ getChartData, getLineChartData, getBarChartData }) => {
+export const MetricsGraph = ({ getChartData, getLineChartData, getBarChartData, getPercentileData }) => {
     // Цвета для темной темы
     const darkTheme = {
         grid: "#2d303a",
@@ -75,9 +75,9 @@ export const MetricsGraph = ({ getChartData, getLineChartData, getBarChartData }
                                 itemStyle={{ color: "#fff" }}
                             />
                             <Legend />
-                            <Bar dataKey="Scenario1" fill="#ff4d4f" name="Без индексов" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="Scenario2" fill="#52c41a" name="С индексами" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="Scenario3" fill="#1890ff" name="Redis" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="Scenario1" fill="#ff7875" name="QPS: No Index" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="Scenario2" fill="#95de64" name="QPS: Index" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="Scenario3" fill="#69c0ff" name="QPS: Redis" radius={[4, 4, 0, 0]} />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
@@ -104,6 +104,35 @@ export const MetricsGraph = ({ getChartData, getLineChartData, getBarChartData }
                             <Bar dataKey="Scenario1" fill="#ff7875" name="QPS: No Index" radius={[4, 4, 0, 0]} />
                             <Bar dataKey="Scenario2" fill="#95de64" name="QPS: Index" radius={[4, 4, 0, 0]} />
                             <Bar dataKey="Scenario3" fill="#69c0ff" name="QPS: Redis" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+            {/* ГРАФИК 4: ПЕРЦЕНТИЛИ (p95 / p99) */}
+            <div className="chart-card">
+                <h3 style={{ marginBottom: "10px", color: darkTheme.title }}>🎯 Стабильность: Перцентили задержки</h3>
+                <p style={{ fontSize: "14px", color: darkTheme.text, marginBottom: "20px" }}>
+                    p99 показывает задержку для 1% самых "несчастливых" запросов. Чем ближе p99 к среднему, тем стабильнее система.
+                </p>
+                <div style={{ height: "350px", width: "100%" }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={getPercentileData()}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkTheme.grid} />
+                            <XAxis dataKey="name" stroke={darkTheme.text} tick={{ fill: darkTheme.text }} />
+                            <YAxis stroke={darkTheme.text} tick={{ fill: darkTheme.text }} label={{ value: 'ms', angle: -90, position: 'insideLeft', fill: darkTheme.text }} />
+                            <Tooltip 
+                                contentStyle={{ 
+                                    backgroundColor: darkTheme.tooltipBg, 
+                                    border: `1px solid ${darkTheme.tooltipBorder}`,
+                                    borderRadius: "8px"
+                                }}
+                                itemStyle={{ color: "#fff" }}
+                            />
+                            <Legend />
+                            {/* p95 - основной показатель */}
+                            <Bar dataKey="p95" fill="#8884d8" name="p95 (95% запросов быстрее этого)" radius={[4, 4, 0, 0]} />
+                            {/* p99 - показатель "хвоста" */}
+                            <Bar dataKey="p99" fill="#82ca9d" name="p99 (Пиковая задержка)" radius={[4, 4, 0, 0]} />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>

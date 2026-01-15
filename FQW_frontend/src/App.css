@@ -277,3 +277,42 @@ td {
   padding: 60px;
   color: var(--text-muted);
 }
+
+/* Бейджи для разных сценариев */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.status-badge.NoIndex { background: rgba(255, 95, 86, 0.1); color: #ff5f56; }
+.status-badge.SQLIndex { background: rgba(255, 189, 46, 0.1); color: #ffbd2e; }
+.status-badge.RedisCache { background: rgba(39, 201, 63, 0.1); color: #27c93f; }
+
+/* Кнопка в таблице */
+.history-btn {
+    background: rgba(100, 108, 255, 0.1);
+    border: 1px solid rgba(100, 108, 255, 0.3);
+    color: #646cff;
+    padding: 8px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+
+.history-btn:hover {
+    background: #646cff;
+    color: white;
+    transform: translateY(-2px);
+}
+
+.history-row:hover {
+    background-color: rgba(255, 255, 255, 0.02);
+}
