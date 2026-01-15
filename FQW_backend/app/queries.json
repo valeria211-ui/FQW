@@ -2,7 +2,7 @@
   {
     "name": "point_user_by_email",
     "type": "point",
-    "sql": "SELECT * FROM users WHERE email = 'user_50000@example.com';"
+    "sql": "SELECT * FROM users WHERE email = %s;"
   },
   {
     "name": "orders_aggregation",
@@ -12,6 +12,6 @@
   {
     "name": "recent_orders_join",
     "type": "join",
-    "sql": "SELECT u.username, o.order_id, p.name, o.total_price FROM orders o JOIN users u ON o.user_id = u.user_id JOIN products p ON o.product_id = p.product_id WHERE o.created_at > NOW() - INTERVAL '1 month';"
+    "sql": "SELECT u.username, o.order_id, p.name, o.total_price FROM orders o JOIN users u ON o.user_id = u.user_id JOIN products p ON o.product_id = p.product_id WHERE o.created_at > NOW() - CAST(%s AS INTERVAL);"
   }
 ]

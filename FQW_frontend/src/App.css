@@ -1,76 +1,279 @@
+/* 1. Глобальные сбросы */
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  width: 100%;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
 }
 
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
+/* 2. Основная структура Layout */
+.layout {
+  display: flex;
+  width: 100vw;
+  min-height: 100vh;
+  background-color: #f4f7f9; /* Светлый фон для контента */
+  margin: 0;
+  padding: 0;
 }
 
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+/* 3. Узкая боковая панель (Floating Sidebar) */
+.sidebar {
+  width: 100px; /* Узкая панель */
+  background-color: #1a1c23; /* Темный фон */
+  height: calc(100vh - 40px); /* Отступы сверху и снизу */
+  position: fixed;
+  left: 20px;
+  top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 24px; /* Закругленные края */
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  padding: 20px 0;
+  z-index: 1000;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
+/* Навигация */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  align-items: center;
+  margin-top: 20px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
+/* Кнопки-иконки Lucide */
+.nav-item {
+  all: unset;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   color: #888;
 }
 
-.layout {
-  width: 100%;
+.nav-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+/* Активное состояние кнопки */
+.nav-item.active {
+  background-color: #646cff; /* Твой фирменный цвет */
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(100, 108, 255, 0.4);
+}
+
+/* 4. Главная область контента */
+.main-content {
+  flex-grow: 1;
+  margin-left: 140px; /* Ширина сайдбара 100px + отступы */
+  padding: 40px;
   min-height: 100vh;
-  background-color: #f0f2f5;
-  margin: 0;
-  padding: 40px 0;
   box-sizing: border-box;
 }
 
 .central-container {
-  max-width: 1200px;
-  width: 90%;
-  margin: 0 auto;
+  width: 100%;
+  max-width: 1400px;
   display: flex;
   flex-direction: column;
-  gap: 30px
+  gap: 30px;
 }
 
-.scenario-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-}
-
-.monitoring{
-  text-align: center; 
+/* 5. Заголовки и текст */
+.monitoring {
+  text-align: left; /* В современных дашбордах текст лучше слева */
   color: #1a1a1a;
   font-weight: 800;
-  margin-bottom: 10px ;
+  font-size: 2rem;
+  margin-bottom: 10px;
+}
+
+/* 6. Сетка карточек сценариев */
+.scenario-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+/* 7. Сетка для графиков */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); 
+  gap: 25px;
+  width: 100%;
+}
+
+.chart-card {
+  background: white;
+  padding: 25px;
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+  border: 1px solid #eef0f2;
+}
+
+.chart-card.wide {
+  grid-column: 1 / -1; /* Растягивает график QPS на всю ширину */
+}
+
+/* 8. Состояние "Пусто" (Empty State) */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  background: white;
+  border-radius: 20px;
+  color: #666;
+  text-align: center;
+  border: 2px dashed #e0e0e0;
+}
+
+/* 9. Анимация появления вкладок */
+.fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 1. Глобальные настройки для темной темы */
+:root {
+  --bg-dark: #0f1115;      /* Основной глубокий черный фон */
+  --bg-card: #1a1c23;      /* Цвет карточек и панелей */
+  --text-main: #e0e0e0;    /* Светло-серый текст */
+  --text-muted: #888;      /* Приглушенный текст */
+  --accent: #646cff;       /* Твой фирменный фиолетовый */
+  --border: #2d303a;       /* Цвет границ */
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  font-family: 'Inter', sans-serif;
+}
+
+#root {
+  width: 100%;
+}
+
+/* 2. Layout */
+.layout {
+  display: flex;
+  width: 100vw;
+  min-height: 100vh;
+  background-color: var(--bg-dark);
+}
+
+/* 3. Сайдбар (без точек, чистый минимализм) */
+.sidebar {
+  width: 100px;
+  background-color: var(--bg-card);
+  height: calc(100vh - 40px);
+  position: fixed;
+  left: 20px;
+  top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  padding-top: 30px; /* Отступ сверху вместо точек */
+  z-index: 1000;
+}
+
+.nav-item {
+  all: unset;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: var(--text-muted);
+  margin-bottom: 15px;
+}
+
+.nav-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.nav-item.active {
+  background-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(100, 108, 255, 0.3);
+}
+
+/* 4. Контентная область */
+.main-content {
+  flex-grow: 1;
+  margin-left: 140px;
+  padding: 40px;
+}
+
+.monitoring {
+  text-align: left;
+  color: #fff;
+  font-weight: 800;
+  margin-bottom: 20px;
+}
+
+/* 5. Карточки (Сценарии и Графики) */
+.chart-card, .scenario-card {
+  background-color: var(--bg-card) !important; /* Принудительно темный фон */
+  border: 1px solid var(--border) !important;
+  border-radius: 20px;
+  padding: 25px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  color: var(--text-main);
+}
+
+/* 6. Таблица (если она есть) */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+th {
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 15px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+td {
+  padding: 15px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* 7. Состояние пустоты */
+.empty-state {
+  background: var(--bg-card);
+  border: 2px dashed var(--border);
+  border-radius: 20px;
+  padding: 60px;
+  color: var(--text-muted);
 }
