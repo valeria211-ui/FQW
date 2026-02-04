@@ -30,7 +30,38 @@ CREATE TABLE IF NOT EXISTS metrics (
     metric_id SERIAL PRIMARY KEY,
     timestamp TIMESTAMP DEFAULT NOW(),
     scenario_type VARCHAR(50),
+    run_id VARCHAR(50),
     query_name VARCHAR(100),
     duration_ms NUMERIC(10,2),
     qps_metric NUMERIC(10,2)
+);
+
+-- Таблица для метрик CPU по времени
+CREATE TABLE IF NOT EXISTS cpu_metrics (
+    cpu_metric_id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMP DEFAULT NOW(),
+    scenario_type VARCHAR(50),
+    run_id VARCHAR(50),
+    cpu_percent NUMERIC(7,2)
+);
+
+-- Таблица для метрик памяти (RAM)
+CREATE TABLE IF NOT EXISTS ram_metrics (
+    ram_metric_id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMP DEFAULT NOW(),
+    scenario_type VARCHAR(50),
+    run_id VARCHAR(50),
+    component VARCHAR(50),
+    ram_mb NUMERIC(10,2)
+);
+
+-- Таблица для метрик кэширования (Redis)
+CREATE TABLE IF NOT EXISTS cache_metrics (
+    cache_metric_id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMP DEFAULT NOW(),
+    scenario_type VARCHAR(50),
+    run_id VARCHAR(50),
+    hits BIGINT,
+    misses BIGINT,
+    hit_ratio NUMERIC(5,2)
 );

@@ -15,6 +15,11 @@ import "./App.css";
 
 function App() {
   const scenarios = ["Scenario1", "Scenario2", "Scenario3"];
+  const scenarioLabels = {
+    Scenario1: "Scenario1 — No Index",
+    Scenario2: "Scenario2 — Index",
+    Scenario3: "Scenario3 — Redis Cache"
+  };
   
   const [status, setStatus] = useState({
     Scenario1: "Не запускалось", Scenario2: "Не запускалось", Scenario3: "Не запускалось",
@@ -22,6 +27,24 @@ function App() {
   const [availableRuns, setAvailableRuns] = useState({ Scenario1: [], Scenario2: [], Scenario3: [] });
   const [selectedRunId, setSelectedRunId] = useState({ Scenario1: "", Scenario2: "", Scenario3: "" });
   const [metrics, setMetrics] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [qpsSeries, setQpsSeries] = useState([]);
+  const [cpuSeries, setCpuSeries] = useState([]);
+  const [ramSeries, setRamSeries] = useState([]);
+  const [cacheSummary, setCacheSummary] = useState(null);
+  const [comparisonSummaries, setComparisonSummaries] = useState([]);
+  const [durationSecByScenario, setDurationSecByScenario] = useState({
+    Scenario1: 300,
+    Scenario2: 300,
+    Scenario3: 300
+  });
+  const [runningUntilByScenario, setRunningUntilByScenario] = useState({
+    Scenario1: null,
+    Scenario2: null,
+    Scenario3: null
+  });
+  const [nowTick, setNowTick] = useState(Date.now());
+  const [activeScenario, setActiveScenario] = useState(null);
   const [fullHistory, setFullHistory] = useState([]);
   const [activeTab, setActiveTab] = useState("tests");
 
@@ -72,12 +95,44 @@ function App() {
     }
   }, [activeTab]);
 
+  const fetchSeries = async (run_id) => {
+    const summaryRes = await axios.get(`http://127.0.0.1:5050/metrics/summary/${run_id}`);
+    setSummary(summaryRes.data);
+    const qpsRes = await axios.get(`http://127.0.0.1:5050/metrics/qps_series/${run_id}`);
+    setQpsSeries(qpsRes.data || []);
+    const cpuRes = await axios.get(`http://127.0.0.1:5050/metrics/cpu_series/${run_id}`);
+    setCpuSeries(cpuRes.data || []);
+    const ramRes = await axios.get(`http://127.0.0.1:5050/metrics/ram_series/${run_id}`);
+    setRamSeries(ramRes.data || []);
+    const cacheRes = await axios.get(`http://127.0.0.1:5050/metrics/cache_summary/${run_id}`);
+    setCacheSummary(cacheRes.data || null);
+  };
+
+  const fetchComparisonSummaries = async () => {
+    try {
+      const results = await Promise.all(
+        scenarios.map(async (sc) => {
+          const run_id = selectedRunId[sc];
+          if (!run_id) return null;
+          const res = await axios.get(`http://127.0.0.1:5050/metrics/summary/${run_id}`);
+          return { scenario: sc, run_id, ...res.data };
+        })
+      );
+      setComparisonSummaries(results.filter(Boolean));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const fetchMetrics = async (scenario, forcedId = null) => {
     const run_id = forcedId || selectedRunId[scenario];
     if (!run_id) return alert("Выберите ID!");
     try {
       const response = await axios.get(`http://127.0.0.1:5050/metrics/data/${run_id}`);
       setMetrics(response.data.map(m => ({ ...m, scenario_type: scenario })));
+      setActiveScenario(scenario);
+      await fetchSeries(run_id);
+      await fetchComparisonSummaries();
     } catch (error) {
       console.error(error);
     }
@@ -88,24 +143,60 @@ function App() {
     const technicalName = reverseMap[displayName] || displayName;
     
     setMetrics([]); // Сбрасываем старые данные перед загрузкой
+    setSummary(null);
+    setQpsSeries([]);
+    setCpuSeries([]);
+    setRamSeries([]);
+    setCacheSummary(null);
+    setComparisonSummaries([]);
+    setActiveScenario(technicalName);
     setSelectedRunId(prev => ({ ...prev, [technicalName]: runId }));
     setActiveTab("tests");
     fetchMetrics(technicalName, runId); 
   };
 
-  const runLoadTest = async (scenario) => {
+  const runLoadTest = async (scenario, durationSec) => {
     setStatus((prev) => ({ ...prev, [scenario]: "Запуск..." }));
     try {
-      const response = await axios.post(`http://127.0.0.1:5050/run_load_test/${scenario}`);
+      const response = await axios.post(`http://127.0.0.1:5050/run_load_test/${scenario}`, {
+        duration_sec: durationSec
+      });
       const newRunId = response.data.run_id;
       setStatus((prev) => ({ ...prev, [scenario]: `ID: ${newRunId}` }));
       setAvailableRuns(prev => ({ ...prev, [scenario]: [newRunId, ...prev[scenario]] }));
       setSelectedRunId(prev => ({ ...prev, [scenario]: newRunId }));
+      setActiveScenario(scenario);
+      if (durationSec) {
+        setRunningUntilByScenario(prev => ({
+          ...prev,
+          [scenario]: Date.now() + durationSec * 1000
+        }));
+      }
       setTimeout(() => fetchAvailableRuns(scenario), 2000);
     } catch (error) {
       setStatus((prev) => ({ ...prev, [scenario]: "Ошибка" }));
     }
   };
+
+  useEffect(() => {
+    if (activeTab !== "graphs" || !activeScenario) return;
+    const run_id = selectedRunId[activeScenario];
+    if (!run_id) return;
+    const interval = setInterval(() => {
+      fetchSeries(run_id).catch(() => {});
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [activeTab, activeScenario, selectedRunId]);
+
+  useEffect(() => {
+    if (activeTab !== "graphs") return;
+    fetchComparisonSummaries().catch(() => {});
+  }, [activeTab, selectedRunId]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // --- ФУНКЦИИ ОБРАБОТКИ ДАННЫХ ДЛЯ ГРАФИКОВ ---
 
@@ -139,19 +230,6 @@ function App() {
     });
   };
 
-  const getLineChartData = () => metrics.map((m, i) => ({ name: i + 1, qps: parseFloat(m.qps) }));
-
-  const getBarChartData = () => {
-    const grouped = metrics.reduce((acc, m) => {
-      const nameMap = { point_user_by_email: "Point", orders_aggregation: "Agg", recent_orders_join: "Join" };
-      const shortName = nameMap[m.query] || m.query;
-      if (!acc[shortName]) acc[shortName] = { name: shortName };
-      acc[shortName][m.scenario_type] = parseFloat(m.qps);
-      return acc;
-    }, {});
-    return Object.values(grouped);
-  };
-
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -166,19 +244,33 @@ function App() {
       <main className="main-content">
         <div className="central-container">
           <h1 className="monitoring">
-            {activeTab === "tests" ? "🚀 Панель тестов" : 
-             activeTab === "graphs" ? "📈 Аналитика" :
-             activeTab === "history" ? "📜 История запусков" : "⚙️ Настройки"}
+            {activeTab === "tests" ? "Панель тестов" : 
+             activeTab === "graphs" ? "Аналитика" :
+             activeTab === "history" ? "История запусков" : "Настройки"}
           </h1>
 
           {activeTab === "tests" && (
             <div className="tab-content fade-in">
               <div className="scenario-cards">
                 {scenarios.map((sc) => (
-                  <ScenarioCards key={sc} availableRuns={availableRuns} setSelectedRunId={setSelectedRunId} runLoadTest={runLoadTest} fetchMetrics={fetchMetrics} status={status} sc={sc} selectedRunId={selectedRunId} />
+                  <ScenarioCards 
+                    key={sc}
+                    availableRuns={availableRuns}
+                    setSelectedRunId={setSelectedRunId}
+                    runLoadTest={runLoadTest}
+                    fetchMetrics={fetchMetrics}
+                    status={status}
+                    sc={sc}
+                    selectedRunId={selectedRunId}
+                    durationSecByScenario={durationSecByScenario}
+                    setDurationSecByScenario={setDurationSecByScenario}
+                    scenarioLabels={scenarioLabels}
+                    runningUntilByScenario={runningUntilByScenario}
+                    nowTick={nowTick}
+                  />
                 ))}
               </div>
-              {metrics.length > 0 && <MetricsTable metrics={metrics} selectedRunId={selectedRunId} />}
+              {metrics.length > 0 && <MetricsTable metrics={metrics} selectedRunId={selectedRunId} summary={summary} />}
             </div>
           )}
 
@@ -187,9 +279,13 @@ function App() {
               {metrics.length > 0 ? (
                 <MetricsGraph 
                   getChartData={getChartData} 
-                  getLineChartData={getLineChartData} 
-                  getBarChartData={getBarChartData} 
                   getPercentileData={getPercentileData}
+                  summary={summary}
+                  qpsSeries={qpsSeries}
+                  cpuSeries={cpuSeries}
+                  ramSeries={ramSeries}
+                  cacheSummary={cacheSummary}
+                  comparisonSummaries={comparisonSummaries}
                 />
               ) : (
                 <div className="empty-state"><Activity size={48} color="#ccc" /><h3>Данные не загружены</h3><p>Выберите запуск во вкладке "Тесты"</p></div>
@@ -202,7 +298,7 @@ function App() {
           )}
 
           {activeTab === "settings" && (
-            <div className="tab-content fade-in empty-state"><h3>⚙️ Настройки</h3><p>Настройка подключений к БД.</p></div>
+            <div className="tab-content fade-in empty-state"><h3>Настройки</h3><p>Настройка подключений к БД.</p></div>
           )}
         </div>
       </main>

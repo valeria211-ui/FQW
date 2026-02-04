@@ -1,6 +1,4 @@
-import { useState, useEffect } from "react";
-
-export const MetricsTable = ({ metrics, selectedRunId }) => {
+export const MetricsTable = ({ metrics, selectedRunId, summary }) => {
     // Используем те же цвета, что и в графиках для единообразия
     const darkTheme = {
         bg: "#ffffff",      // var(--bg-card)
@@ -26,15 +24,35 @@ export const MetricsTable = ({ metrics, selectedRunId }) => {
             }}
         >
             <h2 style={{ marginBottom: "20px", color: "#000000", fontSize: "1.5rem" }}>
-                📋 Результаты ID: <span style={{ color: "#646cff" }}>{selectedRunId[metrics[0]?.scenario_type]}</span>
+                Результаты ID: <span style={{ color: "#646cff" }}>{selectedRunId[metrics[0]?.scenario_type]}</span>
             </h2>
+
+            {summary && (
+                <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "20px" }}>
+                    <div style={{ padding: "12px 16px", border: `1px solid ${darkTheme.border}`, borderRadius: "12px" }}>
+                        <div style={{ color: darkTheme.textMuted, fontSize: "0.85rem" }}>Average Latency</div>
+                        <div style={{ color: "#646cff", fontWeight: "bold" }}>{summary.avg_latency_ms?.toFixed(2)} ms</div>
+                    </div>
+                    <div style={{ padding: "12px 16px", border: `1px solid ${darkTheme.border}`, borderRadius: "12px" }}>
+                        <div style={{ color: darkTheme.textMuted, fontSize: "0.85rem" }}>Throughput</div>
+                        <div style={{ color: "#52c41a", fontWeight: "bold" }}>{summary.throughput_qps?.toFixed(2)} QPS</div>
+                    </div>
+                    <div style={{ padding: "12px 16px", border: `1px solid ${darkTheme.border}`, borderRadius: "12px" }}>
+                        <div style={{ color: darkTheme.textMuted, fontSize: "0.85rem" }}>Latency p95</div>
+                        <div style={{ color: "#646cff", fontWeight: "bold" }}>{summary.p95_latency_ms?.toFixed(2)} ms</div>
+                    </div>
+                    <div style={{ padding: "12px 16px", border: `1px solid ${darkTheme.border}`, borderRadius: "12px" }}>
+                        <div style={{ color: darkTheme.textMuted, fontSize: "0.85rem" }}>Latency p99</div>
+                        <div style={{ color: "#646cff", fontWeight: "bold" }}>{summary.p99_latency_ms?.toFixed(2)} ms</div>
+                    </div>
+                </div>
+            )}
             
             <table style={{ width: "100%", borderCollapse: "collapse", color: darkTheme.textMain }}>
                 <thead>
                     <tr style={{ backgroundColor: darkTheme.headerBg, textAlign: "left" }}>
                         <th style={{ padding: "15px", borderBottom: `2px solid ${darkTheme.border}`, color: darkTheme.textMuted, fontWeight: "600" }}>Запрос (Query)</th>
                         <th style={{ padding: "15px", borderBottom: `2px solid ${darkTheme.border}`, color: darkTheme.textMuted, fontWeight: "600" }}>Длительность (ms)</th>
-                        <th style={{ padding: "15px", borderBottom: `2px solid ${darkTheme.border}`, color: darkTheme.textMuted, fontWeight: "600" }}>QPS</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -53,9 +71,6 @@ export const MetricsTable = ({ metrics, selectedRunId }) => {
                             </td>
                             <td style={{ padding: "15px", fontWeight: "bold", color: "#646cff" }}>
                                 {m.duration} <span style={{ fontWeight: "normal", fontSize: "0.8rem" }}>ms</span>
-                            </td>
-                            <td style={{ padding: "15px", color: "#52c41a" }}>
-                                {m.qps}
                             </td>
                         </tr>
                     ))}
