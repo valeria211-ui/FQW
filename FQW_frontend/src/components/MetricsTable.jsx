@@ -30,20 +30,28 @@ export const MetricsTable = ({ metrics, selectedRunId, summary }) => {
             {summary && (
                 <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "20px" }}>
                     <div style={{ padding: "12px 16px", border: `1px solid ${darkTheme.border}`, borderRadius: "12px" }}>
-                        <div style={{ color: darkTheme.textMuted, fontSize: "0.85rem" }}>Average Latency</div>
+                        <div style={{ color: "#030700", fontSize: "0.85rem" }}>Average Latency</div>
                         <div style={{ color: "#646cff", fontWeight: "bold" }}>{summary.avg_latency_ms?.toFixed(2)} ms</div>
                     </div>
                     <div style={{ padding: "12px 16px", border: `1px solid ${darkTheme.border}`, borderRadius: "12px" }}>
-                        <div style={{ color: darkTheme.textMuted, fontSize: "0.85rem" }}>Throughput</div>
+                        <div style={{ color: "#030700", fontSize: "0.85rem" }}>Throughput</div>
                         <div style={{ color: "#52c41a", fontWeight: "bold" }}>{summary.throughput_qps?.toFixed(2)} QPS</div>
                     </div>
                     <div style={{ padding: "12px 16px", border: `1px solid ${darkTheme.border}`, borderRadius: "12px" }}>
-                        <div style={{ color: darkTheme.textMuted, fontSize: "0.85rem" }}>Latency p95</div>
+                        <div style={{ color: "#030700", fontSize: "0.85rem" }}>Latency p95</div>
                         <div style={{ color: "#646cff", fontWeight: "bold" }}>{summary.p95_latency_ms?.toFixed(2)} ms</div>
                     </div>
                     <div style={{ padding: "12px 16px", border: `1px solid ${darkTheme.border}`, borderRadius: "12px" }}>
-                        <div style={{ color: darkTheme.textMuted, fontSize: "0.85rem" }}>Latency p99</div>
+                        <div style={{ color: "#030700", fontSize: "0.85rem" }}>Latency p99</div>
                         <div style={{ color: "#646cff", fontWeight: "bold" }}>{summary.p99_latency_ms?.toFixed(2)} ms</div>
+                    </div>
+                    <div style={{ padding: "12px 16px", border: `1px solid ${darkTheme.border}`, borderRadius: "12px" }}>
+                        <div style={{ color: "#030700", fontSize: "0.85rem" }}>Avg CPU (Postgres)</div>
+                        <div style={{ color: "#ffb347", fontWeight: "bold" }}>{summary.avg_cpu_percent?.toFixed(2)} %</div>
+                    </div>
+                    <div style={{ padding: "12px 16px", border: `1px solid ${darkTheme.border}`, borderRadius: "12px" }}>
+                        <div style={{ color: "#030700", fontSize: "0.85rem" }}>Peak CPU (Postgres)</div>
+                        <div style={{ color: "#ffb347", fontWeight: "bold" }}>{summary.peak_cpu_percent?.toFixed(2)} %</div>
                     </div>
                 </div>
             )}

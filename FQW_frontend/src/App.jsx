@@ -184,7 +184,7 @@ function App() {
     if (!run_id) return;
     const interval = setInterval(() => {
       fetchSeries(run_id).catch(() => {});
-    }, 2000);
+    }, 1000);
     return () => clearInterval(interval);
   }, [activeTab, activeScenario, selectedRunId]);
 

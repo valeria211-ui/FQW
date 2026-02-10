@@ -2,55 +2,45 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from load_test import run_load_test
 import threading
-import os
 from db import get_connection
 import time
+from scenarios_config import load_scenarios
 
 app = Flask(__name__)
 CORS(app)  # Разрешаем CORS для всех маршрутов
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # родитель папки app/
+SCENARIO_SQL = load_scenarios()
 
-SCENARIO_FILES = {
-    "Scenario1": os.path.join(BASE_DIR, "scenarios", "scenario1.sql"),
-    "Scenario2": os.path.join(BASE_DIR, "scenarios", "scenario2.sql"),
-    "Scenario3": os.path.join(BASE_DIR, "scenarios", "scenario3.sql")
-}
 
-def execute_sql_file(filepath):
-    if not os.path.exists(filepath):
-        print(f"Файл не найден: {filepath}")
+def execute_sql_commands(sql_commands):
+    if not sql_commands:
         return
-    
+
     conn = get_connection()
     cur = conn.cursor()
     try:
-        with open(filepath, "r") as f:
-            # Читаем и разделяем команды по точке с запятой
-            sql_content = f.read()
-            commands = sql_content.split(';')
-            
-            for command in commands:
-                clean_cmd = command.strip()
-                if clean_cmd:
-                    cur.execute(clean_cmd)
+        for command in sql_commands:
+            clean_cmd = command.strip()
+            if clean_cmd:
+                cur.execute(clean_cmd)
         conn.commit()
     except Exception as e:
         conn.rollback()
-        print(f"🔥 Ошибка в SQL сценарии {filepath}: {e}")
-        # Выбрасываем исключение дальше, чтобы Flask показал его в логах
-        raise e 
+        print(f"🔥 Ошибка в SQL сценарии: {e}")
+        raise e
     finally:
         cur.close()
         conn.close()
 
+
 def prepare_database(scenario):
     """Подготавливает БД под заданный сценарий"""
-    sql_file = SCENARIO_FILES.get(scenario)
-    if sql_file:
-        execute_sql_file(sql_file)
+    sql_commands = SCENARIO_SQL.get(scenario)
+    if sql_commands:
+        execute_sql_commands(sql_commands)
     else:
         print(f"Сценарий {scenario} не найден!")
+
 
 @app.route("/run_load_test/<scenario>", methods=["POST"])
 def start_load_test(scenario):
@@ -87,6 +77,7 @@ def start_load_test(scenario):
         "duration_sec": duration_sec
     })
 
+
 @app.route("/metrics/runs/<scenario>", methods=["GET"])
 def get_runs(scenario):
     conn = get_connection()
@@ -97,6 +88,7 @@ def get_runs(scenario):
     conn.close()
     return jsonify(runs)
 
+
 @app.route("/metrics/data/<run_id>", methods=["GET"])
 def get_metrics(run_id):
     conn = get_connection()
@@ -106,6 +98,7 @@ def get_metrics(run_id):
     cur.close()
     conn.close()
     return jsonify(data)
+
 
 @app.route("/metrics/summary/<run_id>", methods=["GET"])
 def get_metrics_summary(run_id):
@@ -137,6 +130,16 @@ def get_metrics_summary(run_id):
         (run_id,)
     )
     qps_row = cur.fetchone()
+
+    cur.execute(
+        """
+        SELECT AVG(cpu_percent), MAX(cpu_percent)
+        FROM cpu_metrics
+        WHERE run_id=%s
+        """,
+        (run_id,)
+    )
+    cpu_row = cur.fetchone()
     cur.close()
     conn.close()
 
@@ -150,13 +153,17 @@ def get_metrics_summary(run_id):
 
     avg_latency_ms, p95_latency_ms, p99_latency_ms = row
     throughput_qps = qps_row[0] if qps_row and qps_row[0] is not None else 0
+    avg_cpu, peak_cpu = (cpu_row or (None, None))
 
     return jsonify({
         "avg_latency_ms": float(avg_latency_ms) if avg_latency_ms is not None else 0,
         "throughput_qps": float(throughput_qps),
         "p95_latency_ms": float(p95_latency_ms) if p95_latency_ms is not None else 0,
-        "p99_latency_ms": float(p99_latency_ms) if p99_latency_ms is not None else 0
+        "p99_latency_ms": float(p99_latency_ms) if p99_latency_ms is not None else 0,
+        "avg_cpu_percent": float(avg_cpu) if avg_cpu is not None else 0,
+        "peak_cpu_percent": float(peak_cpu) if peak_cpu is not None else 0
     })
+
 
 @app.route("/metrics/qps_series/<run_id>", methods=["GET"])
 def get_qps_series(run_id):
@@ -181,6 +188,7 @@ def get_qps_series(run_id):
     data = [{"ts": r[0].isoformat(), "qps": float(r[1])} for r in rows]
     return jsonify(data)
 
+
 @app.route("/metrics/cpu_series/<run_id>", methods=["GET"])
 def get_cpu_series(run_id):
     conn = get_connection()
@@ -200,6 +208,7 @@ def get_cpu_series(run_id):
     data = [{"ts": r[0].isoformat(), "cpu": float(r[1])} for r in rows]
     return jsonify(data)
 
+
 @app.route("/metrics/ram_series/<run_id>", methods=["GET"])
 def get_ram_series(run_id):
     conn = get_connection()
@@ -218,6 +227,7 @@ def get_ram_series(run_id):
     conn.close()
     data = [{"ts": r[0].isoformat(), "ram_mb": float(r[1])} for r in rows]
     return jsonify(data)
+
 
 @app.route("/metrics/cache_summary/<run_id>", methods=["GET"])
 def get_cache_summary(run_id):

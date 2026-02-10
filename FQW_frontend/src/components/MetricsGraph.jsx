@@ -115,7 +115,8 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
             <div className="chart-card">
                 <h3 style={{ marginBottom: "10px", color: darkTheme.title }}>CPU Usage (%)</h3>
                 <p style={{ fontSize: "14px", color: darkTheme.text, marginBottom: "20px" }}>
-                    Временной ряд загрузки CPU PostgreSQL во время теста.
+                    Временной ряд загрузки CPU PostgreSQL во время теста. Значение может быть больше 100%,
+                    так как отображает суммарную загрузку по нескольким ядрам.
                 </p>
                 <div style={{ height: "300px", width: "100%" }}>
                     <ResponsiveContainer width="100%" height="100%">
