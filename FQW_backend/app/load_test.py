@@ -3,10 +3,8 @@ import time
 import random
 import os
 import json
-import subprocess
-import re
 from db import get_connection, get_redis_client
-from metrics import save_metric, save_cpu_metric, save_ram_metric, save_cache_metric
+from metrics import save_metric, set_run_status
 
 QUERIES_FILE = os.path.join(os.path.dirname(__file__), "queries.json")
 
@@ -15,9 +13,6 @@ with open(QUERIES_FILE, "r") as f:
 
 NUM_THREADS = 10
 REQUESTS_PER_THREAD = 10
-CPU_SAMPLE_INTERVAL_SEC = 1.0
-POSTGRES_CONTAINER = "benchmark_postgres"
-REDIS_CONTAINER = "benchmark_redis"
 
 try:
     r_client = get_redis_client()
@@ -111,82 +106,6 @@ def worker_time(scenario, run_id, end_time):
         query = random.choice(QUERIES)
         simulate_user(scenario, run_id, query)
 
-def get_postgres_cpu_percent():
-    try:
-        result = subprocess.run(
-            ["docker", "stats", "--no-stream", "--format", "{{.CPUPerc}}", POSTGRES_CONTAINER],
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        if result.returncode != 0:
-            return None
-        raw = result.stdout.strip()
-        if not raw:
-            return None
-        return float(raw.replace("%", "").replace(",", "."))
-    except Exception:
-        return None
-
-def parse_mem_to_mb(mem_str):
-    if not mem_str:
-        return None
-    s = mem_str.strip()
-    match = re.match(r"([0-9]*\.?[0-9]+)\s*([KMG]i?B)", s)
-    if not match:
-        return None
-    value = float(match.group(1))
-    unit = match.group(2)
-    if unit in ["KiB", "KB"]:
-        return value / 1024.0
-    if unit in ["MiB", "MB"]:
-        return value
-    if unit in ["GiB", "GB"]:
-        return value * 1024.0
-    return None
-
-def get_container_ram_mb(container_name):
-    try:
-        result = subprocess.run(
-            ["docker", "stats", "--no-stream", "--format", "{{.MemUsage}}", container_name],
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        if result.returncode != 0:
-            return None
-        raw = result.stdout.strip()
-        if not raw:
-            return None
-        # format: "12.34MiB / 1.945GiB"
-        mem_part = raw.split("/")[0].strip()
-        return parse_mem_to_mb(mem_part)
-    except Exception:
-        return None
-
-def cpu_sampler(scenario, run_id, stop_event, cache_start=None):
-    while not stop_event.is_set():
-        cpu = get_postgres_cpu_percent()
-        if cpu is not None:
-            save_cpu_metric(scenario, run_id, cpu)
-        redis_mem = get_container_ram_mb(REDIS_CONTAINER)
-        if redis_mem is not None:
-            save_ram_metric(scenario, run_id, "redis", redis_mem)
-        if scenario == "Scenario3" and r_client:
-            try:
-                info = r_client.info("stats")
-                hits = int(info.get("keyspace_hits", 0))
-                misses = int(info.get("keyspace_misses", 0))
-                if cache_start:
-                    hits = max(0, hits - cache_start["hits"])
-                    misses = max(0, misses - cache_start["misses"])
-                total = hits + misses
-                hit_ratio = (hits / total * 100) if total > 0 else 0
-                save_cache_metric(scenario, run_id, hits, misses, hit_ratio)
-            except Exception:
-                pass
-        time.sleep(CPU_SAMPLE_INTERVAL_SEC)
-
 def run_load_test(scenario="Scenario1", run_id=None, duration_sec=None):
     if run_id is None:
         run_id = str(int(time.time()))
@@ -204,10 +123,13 @@ def run_load_test(scenario="Scenario1", run_id=None, duration_sec=None):
         except:
             pass
 
+    if duration_sec:
+        ends_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time() + duration_sec))
+    else:
+        ends_at = None
+    set_run_status(run_id, scenario, "RUNNING", ends_at)
+
     threads = []
-    stop_event = threading.Event()
-    sampler_thread = threading.Thread(target=cpu_sampler, args=(scenario, run_id, stop_event, cache_start))
-    sampler_thread.start()
 
     if duration_sec:
         end_time = time.time() + duration_sec
@@ -232,8 +154,7 @@ def run_load_test(scenario="Scenario1", run_id=None, duration_sec=None):
     for t in threads:
         t.join()
 
-    stop_event.set()
-    sampler_thread.join()
+    set_run_status(run_id, scenario, "FINISHED")
 
     if scenario == "Scenario3" and r_client:
         try:

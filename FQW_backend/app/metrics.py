@@ -52,3 +52,20 @@ def save_cache_metric(scenario, run_id, hits, misses, hit_ratio):
         )
     conn.commit()
     conn.close()
+
+def set_run_status(run_id, scenario, status, ends_at=None):
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO run_status (run_id, scenario_type, status, started_at, ends_at)
+            VALUES (%s, %s, %s, NOW(), %s)
+            ON CONFLICT (run_id) DO UPDATE
+            SET status = EXCLUDED.status,
+                scenario_type = EXCLUDED.scenario_type,
+                ends_at = COALESCE(EXCLUDED.ends_at, run_status.ends_at)
+            """,
+            (run_id, scenario, status, ends_at)
+        )
+    conn.commit()
+    conn.close()

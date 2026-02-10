@@ -65,3 +65,12 @@ CREATE TABLE IF NOT EXISTS cache_metrics (
     misses BIGINT,
     hit_ratio NUMERIC(5,2)
 );
+
+-- Таблица состояния запусков
+CREATE TABLE IF NOT EXISTS run_status (
+    run_id VARCHAR(50) PRIMARY KEY,
+    scenario_type VARCHAR(50),
+    status VARCHAR(20),
+    started_at TIMESTAMP DEFAULT NOW(),
+    ends_at TIMESTAMP
+);
