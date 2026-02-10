@@ -2,15 +2,15 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, 
   ResponsiveContainer, Legend, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell
 } from 'recharts';
+import { exportSummaryCSV, exportSummaryPDF } from "../utils/reportExport";
 
-export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeries, cpuSeries, ramSeries, cacheSummary, comparisonSummaries }) => {
-    // Цвета для темной темы
-    const darkTheme = {
-        grid: "#2d303a",
-        text: "#888",
-        tooltipBg: "#1a1c23",
-        tooltipBorder: "#2d303a",
-        title: "#fff"
+export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeries, cpuSeries, ramSeries, cacheSummary, comparisonSummaries, activeScenario }) => {
+    const theme = {
+        grid: "var(--border)",
+        text: "var(--text-muted)",
+        tooltipBg: "var(--bg-card)",
+        tooltipBorder: "var(--border)",
+        title: "var(--text-strong)"
     };
 
     const formatTime = (isoTs) => {
@@ -54,39 +54,60 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
         avg: d.avg_latency_ms || 0
     }));
 
+    const comparisonRows = (comparisonSummaries || []).map((d) => ({
+        name: comparisonLabels[d.scenario] || d.scenario,
+        avg_latency_ms: d.avg_latency_ms || 0,
+        p95_latency_ms: d.p95_latency_ms || 0,
+        p99_latency_ms: d.p99_latency_ms || 0,
+        qps: d.throughput_qps || 0,
+        avg_cpu: d.avg_cpu_percent || 0,
+        peak_cpu: d.peak_cpu_percent || 0,
+        avg_ram: d.avg_ram_mb || 0,
+        hit_ratio: d.hit_ratio || 0
+    }));
+
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "30px" }}>
-            
-            <div style={{ marginTop: "10px", color: darkTheme.title, fontWeight: 600, fontSize: "16px" }}>
-                Ресурсы и производительность
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <button
+                    className="history-btn"
+                    onClick={() => exportSummaryCSV(summary, comparisonRows)}
+                >
+                    Export CSV
+                </button>
+                <button
+                    className="history-btn"
+                    onClick={() => exportSummaryPDF(summary, comparisonRows)}
+                >
+                    Export PDF
+                </button>
             </div>
+            <div className="section-title">Ресурсы и производительность</div>
 
-            {/* ГРАФИК 1: QPS (Time Series, Grafana-style) */}
+            {/* QPS */}
             <div className="chart-card">
-                <h3 style={{ marginBottom: "10px", color: darkTheme.title }}>QPS во времени (Grafana-style)</h3>
-                <p style={{ fontSize: "14px", color: darkTheme.text, marginBottom: "20px" }}>
-                    Реальное время на оси X и сглаженная линия, как в Grafana.
-                </p>
+                <h3 className="chart-title">QPS во времени (Grafana-style)</h3>
+                <p className="chart-subtitle">Реальное время на оси X и сглаженная линия, как в Grafana.</p>
                 <div style={{ height: "300px", width: "100%" }}>
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={qpsChartData}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkTheme.grid} />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
                             <XAxis 
                                 dataKey="time" 
-                                stroke={darkTheme.text}
-                                tick={{ fill: darkTheme.text }}
-                                label={{ value: 'Время', position: 'insideBottom', offset: -5, fill: darkTheme.text }} 
+                                stroke={theme.text}
+                                tick={{ fill: theme.text }}
+                                label={{ value: 'Время', position: 'insideBottom', offset: -5, fill: theme.text }} 
                             />
-                            <YAxis stroke={darkTheme.text} tick={{ fill: darkTheme.text }} />
+                            <YAxis stroke={theme.text} tick={{ fill: theme.text }} />
                             <Tooltip 
                                 contentStyle={{ 
-                                    backgroundColor: darkTheme.tooltipBg, 
-                                    border: `1px solid ${darkTheme.tooltipBorder}`,
+                                    backgroundColor: theme.tooltipBg, 
+                                    border: `1px solid ${theme.tooltipBorder}`,
                                     borderRadius: "8px"
                                 }}
-                                itemStyle={{ color: "#fff" }}
+                                itemStyle={{ color: theme.title }}
                             />
-                            <Legend />
+                            <Legend wrapperStyle={{ color: theme.text }} />
                             <Line 
                                 type="monotone" 
                                 dataKey="qps" 
@@ -111,37 +132,34 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                 </div>
             </div>
 
-            {/* ГРАФИК 3: CPU Usage */}
+            {/* CPU */}
             <div className="chart-card">
-                <h3 style={{ marginBottom: "10px", color: darkTheme.title }}>CPU Usage (%)</h3>
-                <p style={{ fontSize: "14px", color: darkTheme.text, marginBottom: "20px" }}>
-                    Временной ряд загрузки CPU PostgreSQL во время теста. Значение может быть больше 100%,
-                    так как отображает суммарную загрузку по нескольким ядрам.
-                </p>
+                <h3 className="chart-title">CPU Usage (%)</h3>
+                <p className="chart-subtitle">Временной ряд загрузки CPU PostgreSQL во время теста. Значение может быть больше 100%, так как отображает суммарную загрузку по нескольким ядрам.</p>
                 <div style={{ height: "300px", width: "100%" }}>
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={cpuChartData}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkTheme.grid} />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
                             <XAxis 
                                 dataKey="time" 
-                                stroke={darkTheme.text}
-                                tick={{ fill: darkTheme.text }}
-                                label={{ value: 'Время', position: 'insideBottom', offset: -5, fill: darkTheme.text }} 
+                                stroke={theme.text}
+                                tick={{ fill: theme.text }}
+                                label={{ value: 'Время', position: 'insideBottom', offset: -5, fill: theme.text }} 
                             />
                             <YAxis 
-                                stroke={darkTheme.text} 
-                                tick={{ fill: darkTheme.text }} 
+                                stroke={theme.text} 
+                                tick={{ fill: theme.text }} 
                                 domain={[0, "dataMax"]}
                             />
                             <Tooltip 
                                 contentStyle={{ 
-                                    backgroundColor: darkTheme.tooltipBg, 
-                                    border: `1px solid ${darkTheme.tooltipBorder}`,
+                                    backgroundColor: theme.tooltipBg, 
+                                    border: `1px solid ${theme.tooltipBorder}`,
                                     borderRadius: "8px"
                                 }}
-                                itemStyle={{ color: "#fff" }}
+                                itemStyle={{ color: theme.title }}
                             />
-                            <Legend />
+                            <Legend wrapperStyle={{ color: theme.text }} />
                             <Line 
                                 type="monotone" 
                                 dataKey="cpu" 
@@ -166,32 +184,30 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                 </div>
             </div>
 
-            {/* ГРАФИК 4: RAM Usage */}
+            {/* RAM */}
             <div className="chart-card">
-                <h3 style={{ marginBottom: "10px", color: darkTheme.title }}>RAM Usage (Redis, MB)</h3>
-                <p style={{ fontSize: "14px", color: darkTheme.text, marginBottom: "20px" }}>
-                    Показывает цену оптимизации: Redis потребляет память, но ускоряет ответы.
-                </p>
+                <h3 className="chart-title">RAM Usage (Redis, MB)</h3>
+                <p className="chart-subtitle">Показывает цену оптимизации: Redis потребляет память, но ускоряет ответы.</p>
                 <div style={{ height: "300px", width: "100%" }}>
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={ramChartData}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkTheme.grid} />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
                             <XAxis 
                                 dataKey="time" 
-                                stroke={darkTheme.text}
-                                tick={{ fill: darkTheme.text }}
-                                label={{ value: 'Время', position: 'insideBottom', offset: -5, fill: darkTheme.text }} 
+                                stroke={theme.text}
+                                tick={{ fill: theme.text }}
+                                label={{ value: 'Время', position: 'insideBottom', offset: -5, fill: theme.text }} 
                             />
-                            <YAxis stroke={darkTheme.text} tick={{ fill: darkTheme.text }} />
+                            <YAxis stroke={theme.text} tick={{ fill: theme.text }} />
                             <Tooltip 
                                 contentStyle={{ 
-                                    backgroundColor: darkTheme.tooltipBg, 
-                                    border: `1px solid ${darkTheme.tooltipBorder}`,
+                                    backgroundColor: theme.tooltipBg, 
+                                    border: `1px solid ${theme.tooltipBorder}`,
                                     borderRadius: "8px"
                                 }}
-                                itemStyle={{ color: "#fff" }}
+                                itemStyle={{ color: theme.title }}
                             />
-                            <Legend />
+                            <Legend wrapperStyle={{ color: theme.text }} />
                             <Area type="monotone" dataKey="ram_mb" stroke="#ffd666" fill="#ffd666" fillOpacity={0.25} name="RAM (raw)" />
                             <Area type="monotone" dataKey="ram_smooth" stroke="#ffa940" fill="#ffa940" fillOpacity={0.35} name="RAM (smooth)" />
                         </AreaChart>
@@ -199,68 +215,66 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                 </div>
             </div>
 
-            {/* ГРАФИК 5: Cache Hit Ratio */}
-            <div className="chart-card">
-                <h3 style={{ marginBottom: "10px", color: darkTheme.title }}>Cache Hit Ratio</h3>
-                <p style={{ fontSize: "14px", color: darkTheme.text, marginBottom: "20px" }}>
-                    Доля запросов, обслуженных из Redis (Scenario 3).
-                </p>
-                <div style={{ height: "280px", width: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Tooltip 
-                                contentStyle={{ 
-                                    backgroundColor: darkTheme.tooltipBg, 
-                                    border: `1px solid ${darkTheme.tooltipBorder}`,
-                                    borderRadius: "8px"
-                                }}
-                                itemStyle={{ color: "#fff" }}
-                            />
-                            <Legend />
-                            <Pie
-                                data={cacheData}
-                                dataKey="value"
-                                nameKey="name"
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={60}
-                                outerRadius={90}
-                                paddingAngle={2}
-                            >
-                                {cacheData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={cacheColors[index % cacheColors.length]} />
-                                ))}
-                            </Pie>
-                        </PieChart>
-                    </ResponsiveContainer>
+            {/* Cache Hit Ratio only for Scenario3 */}
+            {activeScenario === "Scenario3" && (
+                <div className="chart-card">
+                    <h3 className="chart-title">Cache Hit Ratio</h3>
+                    <p className="chart-subtitle">Доля запросов, обслуженных из Redis (Scenario 3).</p>
+                    <div style={{ height: "280px", width: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Tooltip 
+                                    contentStyle={{ 
+                                        backgroundColor: theme.tooltipBg, 
+                                        border: `1px solid ${theme.tooltipBorder}`,
+                                        borderRadius: "8px"
+                                    }}
+                                    itemStyle={{ color: theme.title }}
+                                />
+                                <Legend wrapperStyle={{ color: theme.text }} />
+                                <Pie
+                                    data={cacheData}
+                                    dataKey="value"
+                                    nameKey="name"
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={90}
+                                    paddingAngle={2}
+                                >
+                                    {cacheData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={cacheColors[index % cacheColors.length]} />
+                                    ))}
+                                </Pie>
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                    <div style={{ marginTop: "8px", color: theme.text, fontSize: "13px" }}>
+                        Hit Ratio: {cacheSummary?.hit_ratio?.toFixed(2) || 0}%
+                    </div>
                 </div>
-                <div style={{ marginTop: "8px", color: darkTheme.text, fontSize: "13px" }}>
-                    Hit Ratio: {cacheSummary?.hit_ratio?.toFixed(2) || 0}%
-                </div>
-            </div>
+            )}
 
-            <div style={{ marginTop: "10px", color: darkTheme.title, fontWeight: 600, fontSize: "16px" }}>
-                Задержки
-            </div>
+            <div className="section-title">Задержки</div>
 
-            {/* ГРАФИК 2: LATENCY */}
+            {/* LATENCY */}
             <div className="chart-card">
-                <h3 style={{ marginBottom: "20px", color: darkTheme.title }}>Задержка (Latency, ms)</h3>
+                <h3 className="chart-title">Задержка (Latency, ms)</h3>
                 <div style={{ height: "350px", width: "100%" }}>
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={getChartData()}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkTheme.grid} />
-                            <XAxis dataKey="name" stroke={darkTheme.text} tick={{ fill: darkTheme.text }} />
-                            <YAxis stroke={darkTheme.text} tick={{ fill: darkTheme.text }} />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
+                            <XAxis dataKey="name" stroke={theme.text} tick={{ fill: theme.text }} />
+                            <YAxis stroke={theme.text} tick={{ fill: theme.text }} />
                             <Tooltip 
                                 contentStyle={{ 
-                                    backgroundColor: darkTheme.tooltipBg, 
-                                    border: `1px solid ${darkTheme.tooltipBorder}`,
+                                    backgroundColor: theme.tooltipBg, 
+                                    border: `1px solid ${theme.tooltipBorder}`,
                                     borderRadius: "8px"
                                 }}
-                                itemStyle={{ color: "#fff" }}
+                                itemStyle={{ color: theme.title }}
                             />
-                            <Legend />
+                            <Legend wrapperStyle={{ color: theme.text }} />
                             <Bar dataKey="Scenario1" fill="#ff7875" name="No Index" radius={[4, 4, 0, 0]} />
                             <Bar dataKey="Scenario2" fill="#95de64" name="Index" radius={[4, 4, 0, 0]} />
                             <Bar dataKey="Scenario3" fill="#69c0ff" name="Redis" radius={[4, 4, 0, 0]} />
@@ -269,30 +283,26 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                 </div>
             </div>
 
-            {/* ГРАФИК 6: ПЕРЦЕНТИЛИ (p95 / p99) */}
+            {/* PERCENTILES */}
             <div className="chart-card">
-                <h3 style={{ marginBottom: "10px", color: darkTheme.title }}>Стабильность: Перцентили задержки</h3>
-                <p style={{ fontSize: "14px", color: darkTheme.text, marginBottom: "20px" }}>
-                    p99 показывает задержку для 1% самых "несчастливых" запросов. Чем ближе p99 к среднему, тем стабильнее система.
-                </p>
+                <h3 className="chart-title">Стабильность: Перцентили задержки</h3>
+                <p className="chart-subtitle">p99 показывает задержку для 1% самых "несчастливых" запросов. Чем ближе p99 к среднему, тем стабильнее система.</p>
                 <div style={{ height: "350px", width: "100%" }}>
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={getPercentileData()}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkTheme.grid} />
-                            <XAxis dataKey="name" stroke={darkTheme.text} tick={{ fill: darkTheme.text }} />
-                            <YAxis stroke={darkTheme.text} tick={{ fill: darkTheme.text }} label={{ value: 'ms', angle: -90, position: 'insideLeft', fill: darkTheme.text }} />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
+                            <XAxis dataKey="name" stroke={theme.text} tick={{ fill: theme.text }} />
+                            <YAxis stroke={theme.text} tick={{ fill: theme.text }} label={{ value: 'ms', angle: -90, position: 'insideLeft', fill: theme.text }} />
                             <Tooltip 
                                 contentStyle={{ 
-                                    backgroundColor: darkTheme.tooltipBg, 
-                                    border: `1px solid ${darkTheme.tooltipBorder}`,
+                                    backgroundColor: theme.tooltipBg, 
+                                    border: `1px solid ${theme.tooltipBorder}`,
                                     borderRadius: "8px"
                                 }}
-                                itemStyle={{ color: "#fff" }}
+                                itemStyle={{ color: theme.title }}
                             />
-                            <Legend />
-                            {/* p95 - основной показатель */}
+                            <Legend wrapperStyle={{ color: theme.text }} />
                             <Bar dataKey="p95" fill="#8884d8" name="p95 (95% запросов быстрее этого)" radius={[4, 4, 0, 0]} />
-                            {/* p99 - показатель "хвоста" */}
                             <Bar dataKey="p99" fill="#82ca9d" name="p99 (Пиковая задержка)" radius={[4, 4, 0, 0]} />
                         </BarChart>
                     </ResponsiveContainer>
@@ -301,29 +311,62 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
 
             {comparisonData.length > 0 && (
                 <>
-                    <div style={{ marginTop: "10px", color: darkTheme.title, fontWeight: 600, fontSize: "16px" }}>
-                        Дополнительно: сравнение сценариев (по выбранным run_id)
-                    </div>
+                    <div className="section-title">Дополнительно: сравнение сценариев (по выбранным run_id)</div>
                     <div className="chart-card">
-                        <h3 style={{ marginBottom: "10px", color: darkTheme.title }}>QPS по сценариям</h3>
+                        <h3 className="chart-title">QPS по сценариям</h3>
                         <div style={{ height: "300px", width: "100%" }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={comparisonData}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkTheme.grid} />
-                                    <XAxis dataKey="name" stroke={darkTheme.text} tick={{ fill: darkTheme.text }} />
-                                    <YAxis stroke={darkTheme.text} tick={{ fill: darkTheme.text }} />
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
+                                    <XAxis dataKey="name" stroke={theme.text} tick={{ fill: theme.text }} />
+                                    <YAxis stroke={theme.text} tick={{ fill: theme.text }} />
                                     <Tooltip 
                                         contentStyle={{ 
-                                            backgroundColor: darkTheme.tooltipBg, 
-                                            border: `1px solid ${darkTheme.tooltipBorder}`,
+                                            backgroundColor: theme.tooltipBg, 
+                                            border: `1px solid ${theme.tooltipBorder}`,
                                             borderRadius: "8px"
                                         }}
-                                        itemStyle={{ color: "#fff" }}
+                                        itemStyle={{ color: theme.title }}
                                     />
-                                    <Legend />
+                                    <Legend wrapperStyle={{ color: theme.text }} />
                                     <Bar dataKey="qps" fill="#69c0ff" name="QPS" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
+                        </div>
+                    </div>
+                    <div className="chart-card">
+                        <h3 className="chart-title">Итоговая таблица сравнения</h3>
+                        <div style={{ overflowX: "auto" }}>
+                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                <thead>
+                                    <tr>
+                                        <th>Scenario</th>
+                                        <th>Avg Latency (ms)</th>
+                                        <th>p95 (ms)</th>
+                                        <th>p99 (ms)</th>
+                                        <th>QPS</th>
+                                        <th>Avg CPU %</th>
+                                        <th>Peak CPU %</th>
+                                        <th>Avg RAM (MB)</th>
+                                        <th>Hit Ratio %</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {comparisonRows.map((row, idx) => (
+                                        <tr key={idx}>
+                                            <td>{row.name}</td>
+                                            <td>{row.avg_latency_ms.toFixed(2)}</td>
+                                            <td>{row.p95_latency_ms.toFixed(2)}</td>
+                                            <td>{row.p99_latency_ms.toFixed(2)}</td>
+                                            <td>{row.qps.toFixed(2)}</td>
+                                            <td>{row.avg_cpu.toFixed(2)}</td>
+                                            <td>{row.peak_cpu.toFixed(2)}</td>
+                                            <td>{row.avg_ram.toFixed(2)}</td>
+                                            <td>{row.hit_ratio.toFixed(2)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </>

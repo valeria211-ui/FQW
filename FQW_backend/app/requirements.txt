@@ -3,3 +3,4 @@ flask-cors==6.0.2
 psycopg2-binary==2.9.11
 redis==7.1.1
 pyyaml==6.0.2
+faker==26.0.0

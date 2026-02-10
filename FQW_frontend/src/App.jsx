@@ -11,6 +11,7 @@ import { ScenarioCards } from "./components/ScenarioCards";
 import { MetricsTable } from "./components/MetricsTable";
 import { MetricsGraph } from "./components/MetricsGraph";
 import { HistoryTable } from "./components/HistoryTable"; 
+import { ThemeToggle } from "./components/ThemeToggle";
 import "./App.css";
 
 function App() {
@@ -20,7 +21,9 @@ function App() {
     Scenario2: "Scenario2 — Index",
     Scenario3: "Scenario3 — Redis Cache"
   };
-  
+
+  const [theme, setTheme] = useState("dark");
+
   const [status, setStatus] = useState({
     Scenario1: "Не запускалось", Scenario2: "Не запускалось", Scenario3: "Не запускалось",
   });
@@ -48,7 +51,10 @@ function App() {
   const [fullHistory, setFullHistory] = useState([]);
   const [activeTab, setActiveTab] = useState("tests");
 
-  // Загрузка доступных ID для выпадающих списков
+  useEffect(() => {
+    document.body.setAttribute("data-theme", theme);
+  }, [theme]);
+
   const fetchAvailableRuns = async (scenario) => {
     try {
       const response = await axios.get(`http://127.0.0.1:5050/metrics/runs/${scenario}`);
@@ -65,7 +71,6 @@ function App() {
     scenarios.forEach(fetchAvailableRuns);
   }, []);
 
-  // Функция для загрузки истории всех запусков
   const fetchFullHistory = async () => {
     let combined = [];
     const nameMap = { 
@@ -114,7 +119,7 @@ function App() {
         scenarios.map(async (sc) => {
           const run_id = selectedRunId[sc];
           if (!run_id) return null;
-          const res = await axios.get(`http://127.0.0.1:5050/metrics/summary/${run_id}`);
+          const res = await axios.get(`http://127.0.0.1:5050/metrics/summary_full/${run_id}`);
           return { scenario: sc, run_id, ...res.data };
         })
       );
@@ -142,7 +147,7 @@ function App() {
     const reverseMap = { "No Index": "Scenario1", "SQL Index": "Scenario2", "Redis Cache": "Scenario3" };
     const technicalName = reverseMap[displayName] || displayName;
     
-    setMetrics([]); // Сбрасываем старые данные перед загрузкой
+    setMetrics([]);
     setSummary(null);
     setQpsSeries([]);
     setCpuSeries([]);
@@ -198,8 +203,6 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // --- ФУНКЦИИ ОБРАБОТКИ ДАННЫХ ДЛЯ ГРАФИКОВ ---
-
   const getChartData = () => {
     const grouped = metrics.reduce((acc, m) => {
       const nameMap = { point_user_by_email: "Point", orders_aggregation: "Agg", recent_orders_join: "Join" };
@@ -239,6 +242,9 @@ function App() {
           <button className={`nav-item ${activeTab === "history" ? "active" : ""}`} onClick={() => setActiveTab("history")} title="История"><History size={24} /></button>
           <button className={`nav-item ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")} title="Настройки"><Settings size={24} /></button>
         </nav>
+        <div style={{ marginTop: "auto", marginBottom: "12px" }}>
+          <ThemeToggle theme={theme} setTheme={setTheme} />
+        </div>
       </aside>
 
       <main className="main-content">
@@ -286,6 +292,7 @@ function App() {
                   ramSeries={ramSeries}
                   cacheSummary={cacheSummary}
                   comparisonSummaries={comparisonSummaries}
+                  activeScenario={activeScenario}
                 />
               ) : (
                 <div className="empty-state"><Activity size={48} color="#ccc" /><h3>Данные не загружены</h3><p>Выберите запуск во вкладке "Тесты"</p></div>

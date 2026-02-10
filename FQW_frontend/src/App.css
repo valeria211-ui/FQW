@@ -1,164 +1,12 @@
-/* 1. Глобальные сбросы */
-#root {
-  width: 100%;
-}
-
-body {
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
-}
-
-/* 2. Основная структура Layout */
-.layout {
-  display: flex;
-  width: 100vw;
-  min-height: 100vh;
-  background-color: #f4f7f9; /* Светлый фон для контента */
-  margin: 0;
-  padding: 0;
-}
-
-/* 3. Узкая боковая панель (Floating Sidebar) */
-.sidebar {
-  width: 100px; /* Узкая панель */
-  background-color: #1a1c23; /* Темный фон */
-  height: calc(100vh - 40px); /* Отступы сверху и снизу */
-  position: fixed;
-  left: 20px;
-  top: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  border-radius: 24px; /* Закругленные края */
-  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-  padding: 20px 0;
-  z-index: 1000;
-}
-
-/* Навигация */
-.sidebar-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  width: 100%;
-  align-items: center;
-  margin-top: 20px;
-}
-
-/* Кнопки-иконки Lucide */
-.nav-item {
-  all: unset;
-  width: 56px;
-  height: 56px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-radius: 16px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  color: #888;
-}
-
-.nav-item:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-  color: #fff;
-  transform: translateY(-2px);
-}
-
-/* Активное состояние кнопки */
-.nav-item.active {
-  background-color: #646cff; /* Твой фирменный цвет */
-  color: #fff;
-  box-shadow: 0 8px 20px rgba(100, 108, 255, 0.4);
-}
-
-/* 4. Главная область контента */
-.main-content {
-  flex-grow: 1;
-  margin-left: 140px; /* Ширина сайдбара 100px + отступы */
-  padding: 40px;
-  min-height: 100vh;
-  box-sizing: border-box;
-}
-
-.central-container {
-  width: 100%;
-  max-width: 1400px;
-  display: flex;
-  flex-direction: column;
-  gap: 30px;
-}
-
-/* 5. Заголовки и текст */
-.monitoring {
-  text-align: left; /* В современных дашбордах текст лучше слева */
-  color: #1a1a1a;
-  font-weight: 800;
-  font-size: 2rem;
-  margin-bottom: 10px;
-}
-
-/* 6. Сетка карточек сценариев */
-.scenario-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 20px;
-  width: 100%;
-}
-
-/* 7. Сетка для графиков */
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); 
-  gap: 25px;
-  width: 100%;
-}
-
-.chart-card {
-  background: white;
-  padding: 25px;
-  border-radius: 20px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-  border: 1px solid #eef0f2;
-}
-
-.chart-card.wide {
-  grid-column: 1 / -1; /* Растягивает график QPS на всю ширину */
-}
-
-/* 8. Состояние "Пусто" (Empty State) */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 20px;
-  background: white;
-  border-radius: 20px;
-  color: #666;
-  text-align: center;
-  border: 2px dashed #e0e0e0;
-}
-
-/* 9. Анимация появления вкладок */
-.fade-in {
-  animation: fadeIn 0.4s ease-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* 1. Глобальные настройки для темной темы */
 :root {
-  --bg-dark: #0f1115;      /* Основной глубокий черный фон */
-  --bg-card: #1a1c23;      /* Цвет карточек и панелей */
-  --text-main: #e0e0e0;    /* Светло-серый текст */
-  --text-muted: #888;      /* Приглушенный текст */
-  --accent: #646cff;       /* Твой фирменный фиолетовый */
-  --border: #2d303a;       /* Цвет границ */
+  --bg-dark: #0f1115;
+  --bg-card: #1a1c23;
+  --text-main: #e0e0e0;
+  --text-muted: #888;
+  --accent: #646cff;
+  --border: #2d303a;
+  --text-strong: #ffffff;
+  --text-soft: #b0b0b0;
 }
 
 body {
@@ -169,11 +17,21 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
+body[data-theme="light"] {
+  --bg-dark: #f6f8fb;
+  --bg-card: #ffffff;
+  --text-main: #1a1a1a;
+  --text-muted: #4b5563;
+  --accent: #2d6cdf;
+  --border: #e3e8ef;
+  --text-strong: #0f172a;
+  --text-soft: #6b7280;
+}
+
 #root {
   width: 100%;
 }
 
-/* 2. Layout */
 .layout {
   display: flex;
   width: 100vw;
@@ -181,7 +39,6 @@ body {
   background-color: var(--bg-dark);
 }
 
-/* 3. Сайдбар (без точек, чистый минимализм) */
 .sidebar {
   width: 100px;
   background-color: var(--bg-card);
@@ -194,8 +51,18 @@ body {
   align-items: center;
   border-radius: 24px;
   border: 1px solid var(--border);
-  padding-top: 30px; /* Отступ сверху вместо точек */
+  padding-top: 30px;
   z-index: 1000;
+  box-sizing: border-box;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  align-items: center;
+  margin-top: 20px;
 }
 
 .nav-item {
@@ -209,12 +76,16 @@ body {
   cursor: pointer;
   transition: all 0.3s ease;
   color: var(--text-muted);
-  margin-bottom: 15px;
 }
 
 .nav-item:hover {
   background-color: rgba(255, 255, 255, 0.05);
   color: #fff;
+}
+
+body[data-theme="light"] .nav-item:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #111827;
 }
 
 .nav-item.active {
@@ -223,31 +94,74 @@ body {
   box-shadow: 0 8px 20px rgba(100, 108, 255, 0.3);
 }
 
-/* 4. Контентная область */
 .main-content {
   flex-grow: 1;
   margin-left: 140px;
-  padding: 40px;
+  padding: 44px;
+}
+
+.central-container {
+  width: 100%;
+  max-width: 1400px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
 }
 
 .monitoring {
   text-align: left;
-  color: #fff;
+  color: var(--text-strong);
   font-weight: 800;
-  margin-bottom: 20px;
+  font-size: 2rem;
+  margin-bottom: 10px;
 }
 
-/* 5. Карточки (Сценарии и Графики) */
+.scenario-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 32px;
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); 
+  gap: 25px;
+  width: 100%;
+}
+
 .chart-card, .scenario-card {
-  background-color: var(--bg-card) !important; /* Принудительно темный фон */
+  background-color: var(--bg-card) !important;
   border: 1px solid var(--border) !important;
   border-radius: 20px;
   padding: 25px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
   color: var(--text-main);
 }
 
-/* 6. Таблица (если она есть) */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  background: var(--bg-card);
+  border-radius: 20px;
+  color: var(--text-muted);
+  text-align: center;
+  border: 2px dashed var(--border);
+}
+
+.fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -262,57 +176,237 @@ th {
   padding: 15px;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  color: var(--text-strong);
+}
+
+body[data-theme="light"] th {
+  background-color: rgba(0, 0, 0, 0.03);
 }
 
 td {
   padding: 15px;
   border-bottom: 1px solid var(--border);
+  color: var(--text-main);
 }
 
-/* 7. Состояние пустоты */
-.empty-state {
-  background: var(--bg-card);
-  border: 2px dashed var(--border);
-  border-radius: 20px;
-  padding: 60px;
-  color: var(--text-muted);
-}
-
-/* Бейджи для разных сценариев */
-.status-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 500;
-}
-
-.status-badge.NoIndex { background: rgba(255, 95, 86, 0.1); color: #ff5f56; }
-.status-badge.SQLIndex { background: rgba(255, 189, 46, 0.1); color: #ffbd2e; }
-.status-badge.RedisCache { background: rgba(39, 201, 63, 0.1); color: #27c93f; }
-
-/* Кнопка в таблице */
 .history-btn {
-    background: rgba(100, 108, 255, 0.1);
-    border: 1px solid rgba(100, 108, 255, 0.3);
-    color: #646cff;
-    padding: 8px 16px;
-    border-radius: 10px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.2s ease;
+  background: rgba(100, 108, 255, 0.1);
+  border: 1px solid rgba(100, 108, 255, 0.3);
+  color: var(--accent);
+  padding: 8px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
 }
 
 .history-btn:hover {
-    background: #646cff;
-    color: white;
-    transform: translateY(-2px);
+  background: var(--accent);
+  color: white;
+  transform: translateY(-2px);
 }
 
 .history-row:hover {
-    background-color: rgba(255, 255, 255, 0.02);
+  background-color: rgba(255, 255, 255, 0.02);
 }
+
+body[data-theme="light"] .history-row:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+/* Metrics table overrides */
+.metrics-table {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+}
+
+.metrics-title {
+  margin-bottom: 18px;
+  color: var(--text-strong);
+  font-size: 1.4rem;
+}
+
+.metrics-id {
+  color: var(--accent);
+}
+
+.metrics-summary {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.summary-card {
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+}
+
+.summary-label {
+  color: var(--text-soft);
+  font-size: 0.85rem;
+}
+
+.summary-value {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.summary-value.blue { color: #5c7cff; }
+.summary-value.green { color: #2dbf3a; }
+.summary-value.orange { color: #f59e0b; }
+
+.metrics-table-grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.metrics-table-grid th {
+  color: var(--text-strong);
+}
+
+.metrics-table-grid td code {
+  color: var(--text-muted);
+}
+
+.metrics-table-grid .duration {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.metrics-table-grid .duration span {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 0.8rem;
+}
+
+.section-title {
+  margin-top: 10px;
+  color: var(--text-strong);
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.chart-title {
+  margin-bottom: 10px;
+  color: var(--text-strong);
+}
+
+.chart-subtitle {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+
+/* Recharts text colors */
+.recharts-text,
+.recharts-cartesian-axis-tick-value,
+.recharts-legend-item-text {
+  fill: var(--text-muted) !important;
+  color: var(--text-muted) !important;
+}
+
+body[data-theme="light"] .recharts-text,
+body[data-theme="light"] .recharts-cartesian-axis-tick-value,
+body[data-theme="light"] .recharts-legend-item-text {
+  fill: var(--text-muted) !important;
+  color: var(--text-muted) !important;
+}
+
+/* Scenario card specific */
+.scenario-title {
+  color: var(--text-strong);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 18px;
+}
+
+.scenario-label {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.scenario-select {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  border: 1px solid var(--border);
+  margin-top: 6px;
+}
+
+.scenario-remaining {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.scenario-run-btn {
+  background-color: var(--accent);
+  color: #fff;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.scenario-metrics-btn {
+  margin-top: 12px;
+  padding: 10px;
+  background-color: rgba(100, 108, 255, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(100, 108, 255, 0.25);
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.scenario-status {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 12px;
+}
+
+/* History */
+.history-title {
+  color: var(--text-strong);
+  margin-bottom: 25px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.history-table th {
+  color: var(--text-soft);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-table td {
+  border-bottom: 1px solid var(--border);
+}
+
+.history-id {
+  font-family: monospace;
+  color: var(--accent);
+}
+
+.history-empty {
+  padding: 30px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.status-badge.NoIndex { background: transparent; color: #ff5f56; }
+.status-badge.SQLIndex { background: transparent; color: #ffbd2e; }
+.status-badge.RedisCache { background: transparent; color: #27c93f; }
