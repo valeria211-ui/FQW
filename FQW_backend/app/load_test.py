@@ -19,7 +19,6 @@ try:
 except:
     r_client = None
 
-# --- НОВАЯ ФУНКЦИЯ ДЛЯ РАНДОМИЗАЦИИ ---
 def get_random_params(q_type):
     """Возвращает параметры для подстановки в SQL в зависимости от типа запроса"""
     conn = get_connection()
@@ -28,17 +27,14 @@ def get_random_params(q_type):
     
     try:
         if q_type == "point":
-            # Берем случайный email из реально существующих
             cur.execute("SELECT email FROM users ORDER BY RANDOM() LIMIT 1;")
             res = cur.fetchone()
             params = (res[0],) if res else ("default@example.com",)
             
         elif q_type == "join":
-            # Важно: для типа join в JSON должно быть прописано "type": "join"
             intervals = ["7 days", "30 days", "90 days"]
             params = (random.choice(intervals),)
             
-        # Для aggregation параметры не нужны, так как там группировка по всей таблице
     finally:
         cur.close()
         conn.close()
@@ -47,7 +43,6 @@ def get_random_params(q_type):
 def run_query(query_sql, query_params, scenario):
     """Выполнение запроса с параметрами"""
     
-    # Для кэша Redis используем строку запроса + параметры, чтобы ключи были уникальными
     cache_key = f"{query_sql}_{query_params}"
     
     if scenario == "Scenario3" and r_client:
@@ -60,10 +55,9 @@ def run_query(query_sql, query_params, scenario):
 
     conn = get_connection()
     cur = conn.cursor()
-    start = time.perf_counter() # perf_counter точнее для мс
+    start = time.perf_counter() 
     
     try:
-        # Передаем параметры в execute для безопасной подстановки
         cur.execute(query_sql, query_params)
         cur.fetchall()
         
@@ -85,7 +79,6 @@ def simulate_user(scenario, run_id, query_obj):
         query_name = query_obj["name"]
         query_type = query_obj["type"]
 
-        # Получаем рандомные параметры для этого запуска
         params = get_random_params(query_type)
 
         duration = run_query(sql, params, scenario)

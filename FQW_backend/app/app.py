@@ -7,7 +7,7 @@ import time
 from scenarios_config import load_scenarios
 
 app = Flask(__name__)
-CORS(app)  # Разрешаем CORS для всех маршрутов
+CORS(app) 
 
 SCENARIO_SQL = load_scenarios()
 
@@ -26,7 +26,7 @@ def execute_sql_commands(sql_commands):
         conn.commit()
     except Exception as e:
         conn.rollback()
-        print(f"🔥 Ошибка в SQL сценарии: {e}")
+        print(f"Ошибка в SQL сценарии: {e}")
         raise e
     finally:
         cur.close()
@@ -45,10 +45,8 @@ def prepare_database(scenario):
 @app.route("/run_load_test/<scenario>", methods=["POST"])
 def start_load_test(scenario):
     """Запуск нагрузки с подготовкой БД"""
-    # Подготовка БД
     prepare_database(scenario)
 
-    # Генерация уникального run_id (можно использовать timestamp)
     run_id = str(int(time.time()))
     payload = request.get_json(silent=True) or {}
     duration_sec = payload.get("duration_sec")
@@ -66,7 +64,6 @@ def start_load_test(scenario):
         except Exception:
             duration_sec = None
 
-    # Запуск эмулятора нагрузки в отдельном потоке
     thread = threading.Thread(target=run_load_test, args=(scenario, run_id, duration_sec))
     thread.start()
 
