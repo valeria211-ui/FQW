@@ -36,3 +36,36 @@ scenarios:
       - "CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);"
       - "ANALYZE users;"
       - "ANALYZE orders;"
+  - id: Scenario4
+    name: "Write No Index"
+    description: "Write-heavy: вставка данных в таблицу без индексов."
+    optimizations:
+      indexes: false
+      cache: false
+      workload: write
+    sql:
+      - "CREATE TABLE IF NOT EXISTS write_bench (wb_id SERIAL PRIMARY KEY, user_id INT NOT NULL, product_id INT NOT NULL, status VARCHAR(20) NOT NULL, region VARCHAR(20) NOT NULL, channel VARCHAR(20) NOT NULL, amount NUMERIC(10,2) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW());"
+      - "DROP INDEX IF EXISTS idx_wb_user_id;"
+      - "DROP INDEX IF EXISTS idx_wb_product_id;"
+      - "DROP INDEX IF EXISTS idx_wb_status;"
+      - "DROP INDEX IF EXISTS idx_wb_region;"
+      - "DROP INDEX IF EXISTS idx_wb_channel;"
+      - "DROP INDEX IF EXISTS idx_wb_created_at;"
+      - "TRUNCATE TABLE write_bench;"
+  - id: Scenario5
+    name: "Write Heavy Indexes"
+    description: "Write-heavy: вставка данных в таблицу с 6 индексами."
+    optimizations:
+      indexes: true
+      cache: false
+      workload: write
+    sql:
+      - "CREATE TABLE IF NOT EXISTS write_bench (wb_id SERIAL PRIMARY KEY, user_id INT NOT NULL, product_id INT NOT NULL, status VARCHAR(20) NOT NULL, region VARCHAR(20) NOT NULL, channel VARCHAR(20) NOT NULL, amount NUMERIC(10,2) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW());"
+      - "CREATE INDEX IF NOT EXISTS idx_wb_user_id ON write_bench(user_id);"
+      - "CREATE INDEX IF NOT EXISTS idx_wb_product_id ON write_bench(product_id);"
+      - "CREATE INDEX IF NOT EXISTS idx_wb_status ON write_bench(status);"
+      - "CREATE INDEX IF NOT EXISTS idx_wb_region ON write_bench(region);"
+      - "CREATE INDEX IF NOT EXISTS idx_wb_channel ON write_bench(channel);"
+      - "CREATE INDEX IF NOT EXISTS idx_wb_created_at ON write_bench(created_at);"
+      - "TRUNCATE TABLE write_bench;"
+      - "ANALYZE write_bench;"

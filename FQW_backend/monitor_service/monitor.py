@@ -149,10 +149,14 @@ def save_cache_metric(conn, scenario, run_id, hits, misses, hit_ratio):
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO cache_metrics (scenario_type, run_id, hits, misses, hit_ratio)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO cache_metrics (
+                scenario_type, run_id, hits, misses, hit_ratio,
+                l1_hits, l2_hits, db_fallbacks,
+                avg_l1_latency_ms, avg_l2_latency_ms, avg_db_latency_ms
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
-            (scenario, run_id, hits, misses, hit_ratio),
+            (scenario, run_id, hits, misses, hit_ratio, 0, hits, misses, 0, 0, 0),
         )
 
 
@@ -182,21 +186,7 @@ def main():
             else:
                 print("[monitor] ram=None", flush=True)
 
-            if scenario == "Scenario3":
-                try:
-                    info = r.info("stats")
-                    hits = int(info.get("keyspace_hits", 0))
-                    misses = int(info.get("keyspace_misses", 0))
-                    if run_id not in cache_baseline:
-                        cache_baseline[run_id] = {"hits": hits, "misses": misses}
-                    base = cache_baseline[run_id]
-                    hits = max(0, hits - base["hits"])
-                    misses = max(0, misses - base["misses"])
-                    total = hits + misses
-                    hit_ratio = (hits / total * 100) if total > 0 else 0
-                    save_cache_metric(conn, scenario, run_id, hits, misses, hit_ratio)
-                except Exception:
-                    pass
+            # cache_metrics are persisted by app/load_test.py as final per-run values.
 
             conn.commit()
         except Exception:

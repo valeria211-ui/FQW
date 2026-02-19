@@ -40,16 +40,46 @@ def save_ram_metric(scenario, run_id, component, ram_mb):
     conn.commit()
     conn.close()
 
-def save_cache_metric(scenario, run_id, hits, misses, hit_ratio):
+def save_cache_metric(
+    scenario,
+    run_id,
+    hits,
+    misses,
+    hit_ratio,
+    l1_hits=0,
+    l2_hits=0,
+    db_fallbacks=0,
+    avg_l1_latency_ms=0,
+    avg_l2_latency_ms=0,
+    avg_db_latency_ms=0
+):
     conn = get_connection()
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO cache_metrics (scenario_type, run_id, hits, misses, hit_ratio)
-            VALUES (%s, %s, %s, %s, %s)
-            """,
-            (scenario, run_id, hits, misses, hit_ratio)
-        )
+        try:
+            cur.execute(
+                """
+                INSERT INTO cache_metrics (
+                    scenario_type, run_id, hits, misses, hit_ratio,
+                    l1_hits, l2_hits, db_fallbacks,
+                    avg_l1_latency_ms, avg_l2_latency_ms, avg_db_latency_ms
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    scenario, run_id, hits, misses, hit_ratio,
+                    l1_hits, l2_hits, db_fallbacks,
+                    avg_l1_latency_ms, avg_l2_latency_ms, avg_db_latency_ms
+                )
+            )
+        except Exception:
+            conn.rollback()
+            cur.execute(
+                """
+                INSERT INTO cache_metrics (scenario_type, run_id, hits, misses, hit_ratio)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (scenario, run_id, hits, misses, hit_ratio)
+            )
     conn.commit()
     conn.close()
 

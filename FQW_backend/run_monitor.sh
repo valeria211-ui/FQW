@@ -56,31 +56,7 @@ while true; do
     psql_exec "INSERT INTO ram_metrics (scenario_type, run_id, component, ram_mb) VALUES ('$scenario', '$run_id', 'redis', $ram_mb);" >/dev/null || true
   fi
 
-  # Cache hit ratio only for Scenario3 (cache enabled)
-  if [[ "$scenario" == "Scenario3" ]]; then
-    stats_info=$(docker exec "$REDIS_CONTAINER" redis-cli info stats 2>/dev/null || true)
-    hits=$(echo "$stats_info" | awk -F: '/^keyspace_hits/ {print $2}' | tr -d '\r')
-    misses=$(echo "$stats_info" | awk -F: '/^keyspace_misses/ {print $2}' | tr -d '\r')
-
-    if [[ -n "$hits" && -n "$misses" ]]; then
-      base_file="$BASE_DIR/${run_id}.baseline"
-      if [[ ! -f "$base_file" ]]; then
-        echo "$hits $misses" > "$base_file"
-      fi
-      read -r base_hits base_misses < "$base_file"
-      dh=$((hits - base_hits))
-      dm=$((misses - base_misses))
-      if [[ $dh -lt 0 ]]; then dh=0; fi
-      if [[ $dm -lt 0 ]]; then dm=0; fi
-      total=$((dh + dm))
-      if [[ "$total" -gt 0 ]]; then
-        hit_ratio=$(awk "BEGIN {printf \"%.2f\", $dh/$total*100}")
-      else
-        hit_ratio=0
-      fi
-      psql_exec "INSERT INTO cache_metrics (scenario_type, run_id, hits, misses, hit_ratio) VALUES ('$scenario', '$run_id', $dh, $dm, $hit_ratio);" >/dev/null || true
-    fi
-  fi
+  # cache_metrics are written by app/load_test.py only (single source of truth)
 
   sleep "$SAMPLE_INTERVAL_SEC"
 done

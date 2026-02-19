@@ -1,10 +1,11 @@
+import { useMemo } from "react";
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, 
-  ResponsiveContainer, Legend, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell
+  ResponsiveContainer, Legend, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, ReferenceArea
 } from 'recharts';
 import { exportSummaryCSV, exportSummaryPDF } from "../utils/reportExport";
 
-export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeries, cpuSeries, ramSeries, cacheSummary, comparisonSummaries, activeScenario }) => {
+export const MetricsGraph = ({ chartData, percentileData, summary, qpsSeries, cpuSeries, ramSeries, cacheSummary, comparisonSummaries, activeScenario, sideBySideData }) => {
     const theme = {
         grid: "var(--border)",
         text: "var(--text-muted)",
@@ -19,8 +20,10 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
         return dt.toLocaleTimeString("ru-RU", { hour12: false });
     };
 
-    const buildSeries = (series, valueKey, smoothKey, windowSize = 3) => {
-        const data = series.map((d) => ({
+    const buildSeries = (series, valueKey, smoothKey, windowSize = 3, maxPoints = 240) => {
+        const normalized = Array.isArray(series) ? series : [];
+        const sliced = normalized.length > maxPoints ? normalized.slice(-maxPoints) : normalized;
+        const data = sliced.map((d) => ({
             time: formatTime(d.ts),
             [valueKey]: d[valueKey]
         }));
@@ -34,27 +37,48 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
         return smoothed;
     };
 
-    const qpsChartData = buildSeries(qpsSeries || [], "qps", "qps_smooth");
-    const cpuChartData = buildSeries(cpuSeries || [], "cpu", "cpu_smooth");
-    const ramChartData = buildSeries(ramSeries || [], "ram_mb", "ram_smooth");
+    const qpsChartData = useMemo(
+        () => buildSeries(qpsSeries || [], "qps", "qps_smooth"),
+        [qpsSeries]
+    );
+    const cpuChartData = useMemo(
+        () => buildSeries(cpuSeries || [], "cpu", "cpu_smooth"),
+        [cpuSeries]
+    );
+    const ramChartData = useMemo(
+        () => buildSeries(ramSeries || [], "ram_mb", "ram_smooth"),
+        [ramSeries]
+    );
 
-    const cacheData = [
-        { name: "Hit", value: cacheSummary?.hits || 0 },
-        { name: "Miss", value: cacheSummary?.misses || 0 }
-    ];
-    const cacheColors = ["#52c41a", "#ff7875"];
+    const cacheData = useMemo(() => ([
+        { name: "L1 Hit", value: Number(cacheSummary?.l1_hits || 0) },
+        { name: "L2 Hit (Redis)", value: Number(cacheSummary?.l2_hits || 0) },
+        { name: "Miss", value: Number(cacheSummary?.misses || 0) }
+    ]), [cacheSummary]);
+    const cacheColors = ["#52c41a", "#69c0ff", "#ff7875"];
+    const warmupSeconds = Number(summary?.warmup_seconds || 0);
+    const getWarmupX2 = (data) => {
+        if (!Array.isArray(data) || data.length === 0 || warmupSeconds <= 0) return null;
+        const idx = Math.min(Math.max(warmupSeconds - 1, 0), data.length - 1);
+        return data[idx]?.time || null;
+    };
+    const qpsWarmupX2 = getWarmupX2(qpsChartData);
+    const cpuWarmupX2 = getWarmupX2(cpuChartData);
+    const ramWarmupX2 = getWarmupX2(ramChartData);
     const comparisonLabels = {
         Scenario1: "No Index",
         Scenario2: "Index",
-        Scenario3: "Redis Cache"
+        Scenario3: "Redis Cache",
+        Scenario4: "Write No Index",
+        Scenario5: "Write Heavy Indexes"
     };
-    const comparisonData = (comparisonSummaries || []).map((d) => ({
+    const comparisonData = useMemo(() => (comparisonSummaries || []).map((d) => ({
         name: comparisonLabels[d.scenario] || d.scenario,
         qps: d.throughput_qps || 0,
         avg: d.avg_latency_ms || 0
-    }));
+    })), [comparisonSummaries]);
 
-    const comparisonRows = (comparisonSummaries || []).map((d) => ({
+    const comparisonRows = useMemo(() => (comparisonSummaries || []).map((d) => ({
         name: comparisonLabels[d.scenario] || d.scenario,
         avg_latency_ms: d.avg_latency_ms || 0,
         p95_latency_ms: d.p95_latency_ms || 0,
@@ -64,7 +88,23 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
         peak_cpu: d.peak_cpu_percent || 0,
         avg_ram: d.avg_ram_mb || 0,
         hit_ratio: d.hit_ratio || 0
-    }));
+    })), [comparisonSummaries]);
+
+    const sideBySideChartData = useMemo(() => {
+        if (!sideBySideData?.left?.qps_series || !sideBySideData?.right?.qps_series) return [];
+        const left = sideBySideData.left.qps_series;
+        const right = sideBySideData.right.qps_series;
+        const maxLen = Math.max(left.length, right.length);
+        const data = [];
+        for (let i = 0; i < maxLen; i += 1) {
+            data.push({
+                sec: i + 1,
+                qps_left: left[i]?.qps ?? null,
+                qps_right: right[i]?.qps ?? null
+            });
+        }
+        return data;
+    }, [sideBySideData]);
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "30px" }}>
@@ -84,6 +124,35 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
             </div>
             <div className="section-title">Ресурсы и производительность</div>
 
+            {sideBySideChartData.length > 0 && (
+                <div className="chart-card">
+                    <h3 className="chart-title">Side-by-side QPS Overlay</h3>
+                    <p className="chart-subtitle">
+                        Run A: {sideBySideData?.left?.run_id} ({sideBySideData?.left?.scenario}) | Run B: {sideBySideData?.right?.run_id} ({sideBySideData?.right?.scenario})
+                    </p>
+                    <div style={{ height: "320px", width: "100%" }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={sideBySideChartData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
+                                <XAxis dataKey="sec" stroke={theme.text} tick={{ fill: theme.text }} />
+                                <YAxis stroke={theme.text} tick={{ fill: theme.text }} />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: theme.tooltipBg,
+                                        border: `1px solid ${theme.tooltipBorder}`,
+                                        borderRadius: "8px"
+                                    }}
+                                    itemStyle={{ color: theme.title }}
+                                />
+                                <Legend wrapperStyle={{ color: theme.text }} />
+                                <Line type="monotone" dataKey="qps_left" stroke="#69c0ff" strokeWidth={2} dot={false} isAnimationActive={false} name={`Run A (${sideBySideData?.left?.run_id})`} />
+                                <Line type="monotone" dataKey="qps_right" stroke="#ff7875" strokeWidth={2} dot={false} isAnimationActive={false} name={`Run B (${sideBySideData?.right?.run_id})`} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            )}
+
             {/* QPS */}
             <div className="chart-card">
                 <h3 className="chart-title">QPS во времени (Grafana-style)</h3>
@@ -92,6 +161,15 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={qpsChartData}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
+                            {qpsWarmupX2 && (
+                                <ReferenceArea
+                                    x1={qpsChartData[0]?.time}
+                                    x2={qpsWarmupX2}
+                                    fill="#7c3aed"
+                                    fillOpacity={0.12}
+                                    ifOverflow="extendDomain"
+                                />
+                            )}
                             <XAxis 
                                 dataKey="time" 
                                 stroke={theme.text}
@@ -113,9 +191,9 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                                 dataKey="qps" 
                                 stroke="#69c0ff"
                                 strokeWidth={1}
-                                dot={{ r: 2, fill: "#69c0ff" }}
+                                dot={false}
                                 name="QPS (raw)"
-                                animationDuration={900}
+                                isAnimationActive={false}
                                 opacity={0.35}
                             />
                             <Line 
@@ -125,7 +203,7 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                                 strokeWidth={2} 
                                 dot={false} 
                                 name="QPS (smooth)"
-                                animationDuration={900}
+                                isAnimationActive={false}
                             />
                         </LineChart>
                     </ResponsiveContainer>
@@ -140,6 +218,15 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={cpuChartData}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
+                            {cpuWarmupX2 && (
+                                <ReferenceArea
+                                    x1={cpuChartData[0]?.time}
+                                    x2={cpuWarmupX2}
+                                    fill="#7c3aed"
+                                    fillOpacity={0.12}
+                                    ifOverflow="extendDomain"
+                                />
+                            )}
                             <XAxis 
                                 dataKey="time" 
                                 stroke={theme.text}
@@ -165,9 +252,9 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                                 dataKey="cpu" 
                                 stroke="#ffb347"
                                 strokeWidth={1}
-                                dot={{ r: 2, fill: "#ffb347" }}
+                                dot={false}
                                 name="CPU (raw)"
-                                animationDuration={900}
+                                isAnimationActive={false}
                                 opacity={0.35}
                             />
                             <Line 
@@ -177,7 +264,7 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                                 strokeWidth={2}
                                 dot={false}
                                 name="CPU (smooth)"
-                                animationDuration={900}
+                                isAnimationActive={false}
                             />
                         </LineChart>
                     </ResponsiveContainer>
@@ -192,6 +279,15 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={ramChartData}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
+                            {ramWarmupX2 && (
+                                <ReferenceArea
+                                    x1={ramChartData[0]?.time}
+                                    x2={ramWarmupX2}
+                                    fill="#7c3aed"
+                                    fillOpacity={0.12}
+                                    ifOverflow="extendDomain"
+                                />
+                            )}
                             <XAxis 
                                 dataKey="time" 
                                 stroke={theme.text}
@@ -208,18 +304,18 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                                 itemStyle={{ color: theme.title }}
                             />
                             <Legend wrapperStyle={{ color: theme.text }} />
-                            <Area type="monotone" dataKey="ram_mb" stroke="#ffd666" fill="#ffd666" fillOpacity={0.25} name="RAM (raw)" />
-                            <Area type="monotone" dataKey="ram_smooth" stroke="#ffa940" fill="#ffa940" fillOpacity={0.35} name="RAM (smooth)" />
+                            <Area type="monotone" dataKey="ram_mb" stroke="#ffd666" fill="#ffd666" fillOpacity={0.25} name="RAM (raw)" isAnimationActive={false} />
+                            <Area type="monotone" dataKey="ram_smooth" stroke="#ffa940" fill="#ffa940" fillOpacity={0.35} name="RAM (smooth)" isAnimationActive={false} />
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
             </div>
 
             {/* Cache Hit Ratio only for Scenario3 */}
-            {activeScenario === "Scenario3" && (
+            {(activeScenario === "Scenario3" || (cacheSummary && ((cacheSummary.hits || 0) + (cacheSummary.misses || 0) > 0))) && (
                 <div className="chart-card">
                     <h3 className="chart-title">Cache Hit Ratio</h3>
-                    <p className="chart-subtitle">Доля запросов, обслуженных из Redis (Scenario 3).</p>
+                    <p className="chart-subtitle">Распределение запросов между L1, L2 (Redis) и промахами.</p>
                     <div style={{ height: "280px", width: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
@@ -240,7 +336,12 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                                     cy="50%"
                                     innerRadius={60}
                                     outerRadius={90}
-                                    paddingAngle={2}
+                                    startAngle={90}
+                                    endAngle={-270}
+                                    paddingAngle={1}
+                                    minAngle={1}
+                                    isAnimationActive={false}
+                                    stroke="none"
                                 >
                                     {cacheData.map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={cacheColors[index % cacheColors.length]} />
@@ -252,6 +353,9 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                     <div style={{ marginTop: "8px", color: theme.text, fontSize: "13px" }}>
                         Hit Ratio: {cacheSummary?.hit_ratio?.toFixed(2) || 0}%
                     </div>
+                    <div style={{ marginTop: "6px", color: theme.text, fontSize: "13px" }}>
+                        Avg latency: L1 {cacheSummary?.avg_l1_latency_ms?.toFixed(3) || 0} ms, L2 {cacheSummary?.avg_l2_latency_ms?.toFixed(3) || 0} ms, DB {cacheSummary?.avg_db_latency_ms?.toFixed(2) || 0} ms
+                    </div>
                 </div>
             )}
 
@@ -262,7 +366,7 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                 <h3 className="chart-title">Задержка (Latency, ms)</h3>
                 <div style={{ height: "350px", width: "100%" }}>
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={getChartData()}>
+                        <BarChart data={chartData}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
                             <XAxis dataKey="name" stroke={theme.text} tick={{ fill: theme.text }} />
                             <YAxis stroke={theme.text} tick={{ fill: theme.text }} />
@@ -278,6 +382,8 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                             <Bar dataKey="Scenario1" fill="#ff7875" name="No Index" radius={[4, 4, 0, 0]} />
                             <Bar dataKey="Scenario2" fill="#95de64" name="Index" radius={[4, 4, 0, 0]} />
                             <Bar dataKey="Scenario3" fill="#69c0ff" name="Redis" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="Scenario4" fill="#ffc069" name="Write No Index" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="Scenario5" fill="#b37feb" name="Write Heavy Indexes" radius={[4, 4, 0, 0]} />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
@@ -289,7 +395,7 @@ export const MetricsGraph = ({ getChartData, getPercentileData, summary, qpsSeri
                 <p className="chart-subtitle">p99 показывает задержку для 1% самых "несчастливых" запросов. Чем ближе p99 к среднему, тем стабильнее система.</p>
                 <div style={{ height: "350px", width: "100%" }}>
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={getPercentileData()}>
+                        <BarChart data={percentileData}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
                             <XAxis dataKey="name" stroke={theme.text} tick={{ fill: theme.text }} />
                             <YAxis stroke={theme.text} tick={{ fill: theme.text }} label={{ value: 'ms', angle: -90, position: 'insideLeft', fill: theme.text }} />

@@ -25,6 +25,18 @@ CREATE TABLE IF NOT EXISTS orders (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Таблица для сценариев записи (Write Overhead)
+CREATE TABLE IF NOT EXISTS write_bench (
+    wb_id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL,
+    product_id INT NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    region VARCHAR(20) NOT NULL,
+    channel VARCHAR(20) NOT NULL,
+    amount NUMERIC(10,2) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 -- Таблица для метрик
 CREATE TABLE IF NOT EXISTS metrics (
     metric_id SERIAL PRIMARY KEY,
@@ -63,7 +75,13 @@ CREATE TABLE IF NOT EXISTS cache_metrics (
     run_id VARCHAR(50),
     hits BIGINT,
     misses BIGINT,
-    hit_ratio NUMERIC(5,2)
+    hit_ratio NUMERIC(5,2),
+    l1_hits BIGINT DEFAULT 0,
+    l2_hits BIGINT DEFAULT 0,
+    db_fallbacks BIGINT DEFAULT 0,
+    avg_l1_latency_ms NUMERIC(10,4) DEFAULT 0,
+    avg_l2_latency_ms NUMERIC(10,4) DEFAULT 0,
+    avg_db_latency_ms NUMERIC(10,4) DEFAULT 0
 );
 
 -- Таблица состояния запусков
@@ -73,4 +91,14 @@ CREATE TABLE IF NOT EXISTS run_status (
     status VARCHAR(20),
     started_at TIMESTAMP DEFAULT NOW(),
     ends_at TIMESTAMP
+);
+
+-- Сохраненные планы выполнения запросов (EXPLAIN ANALYZE)
+CREATE TABLE IF NOT EXISTS query_plans (
+    plan_id SERIAL PRIMARY KEY,
+    created_at TIMESTAMP DEFAULT NOW(),
+    run_id VARCHAR(50) NOT NULL,
+    scenario_type VARCHAR(50),
+    query_name VARCHAR(100) NOT NULL,
+    plan_json JSONB NOT NULL
 );
