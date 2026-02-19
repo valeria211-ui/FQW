@@ -3,6 +3,7 @@ import time
 import random
 import os
 import json
+import math
 from db import get_connection, get_redis_client
 from metrics import save_metric, set_run_status, save_cache_metric
 
@@ -77,6 +78,36 @@ class CacheStats:
                 "avg_l2_latency_ms": (self.l2_latency_sum_ms / self.l2_hits) if self.l2_hits else 0.0,
                 "avg_db_latency_ms": (self.db_latency_sum_ms / self.db_fallbacks) if self.db_fallbacks else 0.0
             }
+
+
+class StageStats:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.requests = 0
+        self.durations = []
+
+    def record(self, duration_ms):
+        with self._lock:
+            self.requests += 1
+            self.durations.append(float(duration_ms))
+
+    def snapshot(self):
+        with self._lock:
+            durations = list(self.durations)
+            requests = int(self.requests)
+        if not durations:
+            return {"requests": requests, "avg_ms": 0.0, "p95_ms": 0.0, "p99_ms": 0.0}
+        durations.sort()
+        n = len(durations)
+        avg_ms = sum(durations) / n
+        p95_idx = min(n - 1, max(0, math.ceil(0.95 * n) - 1))
+        p99_idx = min(n - 1, max(0, math.ceil(0.99 * n) - 1))
+        return {
+            "requests": requests,
+            "avg_ms": avg_ms,
+            "p95_ms": durations[p95_idx],
+            "p99_ms": durations[p99_idx],
+        }
 
 
 def reset_l1_cache():
@@ -207,6 +238,19 @@ def simulate_user(scenario, run_id, query_obj, cache_stats=None):
     except Exception as e:
         print(f"[ERROR] {query_obj['name']}: {e}")
 
+
+def simulate_user_capture(scenario, run_id, query_obj, stage_stats, cache_stats=None):
+    try:
+        sql = query_obj["sql"]
+        query_name = query_obj["name"]
+        query_type = query_obj["type"]
+        params = get_random_params(query_type)
+        duration = run_query(sql, params, scenario, query_type, cache_stats)
+        save_metric(scenario, run_id, query_name, duration)
+        stage_stats.record(duration)
+    except Exception as e:
+        print(f"[ERROR] {query_obj['name']}: {e}")
+
 def worker(scenario, run_id, queries, cache_stats=None):
     random.shuffle(queries) 
     for query in queries:
@@ -218,10 +262,39 @@ def worker_time(scenario, run_id, end_time, queries, cache_stats=None):
         simulate_user(scenario, run_id, query, cache_stats)
 
 
+def worker_time_capture(scenario, run_id, end_time, queries, stage_stats, cache_stats=None):
+    while time.time() < end_time:
+        query = random.choice(queries)
+        simulate_user_capture(scenario, run_id, query, stage_stats, cache_stats)
+
+
 def get_queries_for_scenario(scenario):
     if scenario in WRITE_SCENARIOS:
         return WRITE_QUERIES
     return READ_QUERIES
+
+
+def save_saturation_stage(run_id, scenario, stage_idx, threads_count, stage_duration_sec, requests_count, qps, avg_ms, p95_ms, p99_ms, stop_reason=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            INSERT INTO saturation_metrics (
+                run_id, scenario_type, stage_idx, threads_count, stage_duration_sec,
+                requests_count, qps, avg_latency_ms, p95_latency_ms, p99_latency_ms, stop_reason
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                run_id, scenario, stage_idx, threads_count, stage_duration_sec,
+                requests_count, qps, avg_ms, p95_ms, p99_ms, stop_reason
+            )
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
 
 def run_load_test(scenario="Scenario1", run_id=None, duration_sec=None):
     if run_id is None:
@@ -298,3 +371,67 @@ def run_load_test(scenario="Scenario1", run_id=None, duration_sec=None):
             pass
 
     print(f"Load test '{scenario}' finished! run_id={run_id}")
+
+
+def run_saturation_test(
+    scenario="Scenario1",
+    run_id=None,
+    stage_duration_sec=30,
+    thread_steps=None,
+    latency_multiplier=2.0
+):
+    if run_id is None:
+        run_id = str(int(time.time()))
+    if not thread_steps:
+        thread_steps = [10, 20, 40, 80, 120]
+
+    cache_stats = CacheStats() if scenario == "Scenario3" else None
+    if scenario == "Scenario3" and r_client:
+        try:
+            r_client.flushdb()
+            reset_l1_cache()
+        except Exception:
+            pass
+
+    set_run_status(run_id, scenario, "RUNNING")
+    queries = get_queries_for_scenario(scenario)
+    baseline_p95 = None
+
+    for idx, threads_count in enumerate(thread_steps, start=1):
+        stage_stats = StageStats()
+        end_time = time.time() + int(stage_duration_sec)
+        threads = []
+        for _ in range(int(threads_count)):
+            t = threading.Thread(
+                target=worker_time_capture,
+                args=(scenario, run_id, end_time, queries, stage_stats, cache_stats),
+            )
+            t.start()
+            threads.append(t)
+        for t in threads:
+            t.join()
+
+        snap = stage_stats.snapshot()
+        elapsed = max(1.0, float(stage_duration_sec))
+        qps = float(snap["requests"]) / elapsed
+        avg_ms = float(snap["avg_ms"])
+        p95_ms = float(snap["p95_ms"])
+        p99_ms = float(snap["p99_ms"])
+        stop_reason = None
+
+        if baseline_p95 is None and p95_ms > 0:
+            baseline_p95 = p95_ms
+
+        if baseline_p95 and p95_ms >= baseline_p95 * float(latency_multiplier):
+            stop_reason = f"p95 reached {latency_multiplier}x baseline"
+
+        save_saturation_stage(
+            run_id, scenario, idx, threads_count, int(stage_duration_sec),
+            int(snap["requests"]), qps, avg_ms, p95_ms, p99_ms, stop_reason
+        )
+
+        if stop_reason:
+            break
+
+    set_run_status(run_id, scenario, "FINISHED")
+    print(f"Saturation test '{scenario}' finished! run_id={run_id}")

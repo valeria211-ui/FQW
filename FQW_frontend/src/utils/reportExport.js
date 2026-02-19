@@ -1,7 +1,7 @@
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 
-export function exportSummaryCSV(summary, comparisonRows) {
+export function exportSummaryCSV(summary, comparisonRows, saturationSeries = [], sideBySideInsights = []) {
   const rows = [];
   rows.push(["Avg Latency (ms)", summary?.avg_latency_ms ?? 0]);
   rows.push(["p95 (ms)", summary?.p95_latency_ms ?? 0]);
@@ -40,6 +40,29 @@ export function exportSummaryCSV(summary, comparisonRows) {
     csv += "\n\nComparison\n" + compareHeader.join(",") + "\n";
     csv += compareRows.map(r => r.join(",")).join("\n");
   }
+  if (Array.isArray(saturationSeries) && saturationSeries.length > 0) {
+    const satHeader = ["Threads", "QPS", "p95 (ms)", "Stop Reason"];
+    const satRows = saturationSeries.map((s) => [
+      s.threads ?? "",
+      s.qps ?? "",
+      s.p95_latency_ms ?? "",
+      s.stop_reason ?? ""
+    ]);
+    csv += "\n\nSaturation\n" + satHeader.join(",") + "\n";
+    csv += satRows.map(r => r.join(",")).join("\n");
+  }
+  if (Array.isArray(sideBySideInsights) && sideBySideInsights.length > 0) {
+    const insightHeader = ["Metric", "Run A", "Run B", "Delta %", "Verdict"];
+    const insightRows = sideBySideInsights.map((x) => [
+      x.metric,
+      Number(x.runA || 0).toFixed(2),
+      Number(x.runB || 0).toFixed(2),
+      `${x.deltaPct >= 0 ? "+" : ""}${Number(x.deltaPct || 0).toFixed(2)}%`,
+      x.verdict || ""
+    ]);
+    csv += "\n\nConclusions\n" + insightHeader.join(",") + "\n";
+    csv += insightRows.map(r => r.join(",")).join("\n");
+  }
 
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -50,7 +73,7 @@ export function exportSummaryCSV(summary, comparisonRows) {
   URL.revokeObjectURL(url);
 }
 
-export function exportSummaryPDF(summary, comparisonRows, title = "Benchmark Report") {
+export function exportSummaryPDF(summary, comparisonRows, saturationSeries = [], sideBySideInsights = [], title = "Benchmark Report") {
   const doc = new jsPDF();
   doc.setFontSize(16);
   doc.text(title, 14, 16);
@@ -88,6 +111,39 @@ export function exportSummaryPDF(summary, comparisonRows, title = "Benchmark Rep
         Number(r.peak_cpu).toFixed(2),
         Number(r.avg_ram).toFixed(2),
         Number(r.hit_ratio).toFixed(2)
+      ])
+    });
+  }
+
+  if (Array.isArray(saturationSeries) && saturationSeries.length > 0) {
+    const satStartY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : 72;
+    doc.setFontSize(12);
+    doc.text("Saturation", 14, satStartY);
+    doc.autoTable({
+      startY: satStartY + 4,
+      head: [["Threads", "QPS", "p95 (ms)", "Stop Reason"]],
+      body: saturationSeries.map((s) => [
+        s.threads ?? "",
+        Number(s.qps || 0).toFixed(2),
+        Number(s.p95_latency_ms || 0).toFixed(2),
+        s.stop_reason || ""
+      ])
+    });
+  }
+
+  if (Array.isArray(sideBySideInsights) && sideBySideInsights.length > 0) {
+    const insightStartY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : 72;
+    doc.setFontSize(12);
+    doc.text("Conclusions (Delta %)", 14, insightStartY);
+    doc.autoTable({
+      startY: insightStartY + 4,
+      head: [["Metric", "Run A", "Run B", "Delta %", "Verdict"]],
+      body: sideBySideInsights.map((x) => [
+        x.metric,
+        Number(x.runA || 0).toFixed(2),
+        Number(x.runB || 0).toFixed(2),
+        `${x.deltaPct >= 0 ? "+" : ""}${Number(x.deltaPct || 0).toFixed(2)}%`,
+        x.verdict || ""
       ])
     });
   }

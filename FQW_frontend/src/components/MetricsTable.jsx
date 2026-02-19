@@ -48,6 +48,10 @@ export const MetricsTable = ({ metrics, selectedRunId, summary, phaseSummary, ex
                         <div className="summary-value orange">{summary.peak_cpu_percent?.toFixed(2)} %</div>
                     </div>
                     <div className="summary-card">
+                        <div className="summary-label">Efficiency (QPS/CPU)</div>
+                        <div className="summary-value green">{summary.efficiency_score?.toFixed(4) || "0.0000"}</div>
+                    </div>
+                    <div className="summary-card">
                         <div className="summary-label">{summary.warmup_label || "Warm-up Time"}</div>
                         <div className="summary-value green">{summary.warmup_seconds ?? 0} s</div>
                     </div>

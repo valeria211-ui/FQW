@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from load_test import run_load_test
+from load_test import run_load_test, run_saturation_test
 import threading
 from db import get_connection
 import time
@@ -26,6 +26,8 @@ def ensure_runtime_schema():
         cur.execute("ALTER TABLE cache_metrics ADD COLUMN IF NOT EXISTS avg_l1_latency_ms NUMERIC(10,4) DEFAULT 0")
         cur.execute("ALTER TABLE cache_metrics ADD COLUMN IF NOT EXISTS avg_l2_latency_ms NUMERIC(10,4) DEFAULT 0")
         cur.execute("ALTER TABLE cache_metrics ADD COLUMN IF NOT EXISTS avg_db_latency_ms NUMERIC(10,4) DEFAULT 0")
+        cur.execute("ALTER TABLE cpu_metrics ALTER COLUMN cpu_percent TYPE NUMERIC(7,2)")
+        cur.execute("ALTER TABLE ram_metrics ALTER COLUMN ram_mb TYPE NUMERIC(10,2)")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS query_plans (
@@ -35,6 +37,25 @@ def ensure_runtime_schema():
                 scenario_type VARCHAR(50),
                 query_name VARCHAR(100) NOT NULL,
                 plan_json JSONB NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS saturation_metrics (
+                sat_id SERIAL PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT NOW(),
+                run_id VARCHAR(50) NOT NULL,
+                scenario_type VARCHAR(50) NOT NULL,
+                stage_idx INT NOT NULL,
+                threads_count INT NOT NULL,
+                stage_duration_sec INT NOT NULL,
+                requests_count INT NOT NULL,
+                qps NUMERIC(12,4) NOT NULL,
+                avg_latency_ms NUMERIC(12,4) NOT NULL,
+                p95_latency_ms NUMERIC(12,4) NOT NULL,
+                p99_latency_ms NUMERIC(12,4) NOT NULL,
+                stop_reason VARCHAR(200)
             )
             """
         )
@@ -194,6 +215,34 @@ def start_load_test(scenario):
     })
 
 
+@app.route("/run_saturation_test/<scenario>", methods=["POST"])
+def start_saturation_test(scenario):
+    prepare_database(scenario)
+    payload = request.get_json(silent=True) or {}
+    run_id = str(int(time.time()))
+    stage_duration_sec = int(payload.get("stage_duration_sec", 30))
+    latency_multiplier = float(payload.get("latency_multiplier", 2.0))
+    thread_steps = payload.get("thread_steps", [10, 20, 40, 80, 120])
+    if not isinstance(thread_steps, list) or not thread_steps:
+        thread_steps = [10, 20, 40, 80, 120]
+    thread_steps = [int(x) for x in thread_steps if int(x) > 0]
+
+    thread = threading.Thread(
+        target=run_saturation_test,
+        args=(scenario, run_id, stage_duration_sec, thread_steps, latency_multiplier),
+    )
+    thread.start()
+
+    return jsonify({
+        "status": "Saturation test started",
+        "scenario": scenario,
+        "run_id": run_id,
+        "stage_duration_sec": stage_duration_sec,
+        "thread_steps": thread_steps,
+        "latency_multiplier": latency_multiplier
+    })
+
+
 @app.route("/metrics/runs/<scenario>", methods=["GET"])
 def get_runs(scenario):
     conn = get_connection()
@@ -203,6 +252,267 @@ def get_runs(scenario):
     cur.close()
     conn.close()
     return jsonify(runs)
+
+
+@app.route("/metrics/run_status/<run_id>", methods=["GET"])
+def get_run_status(run_id):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT run_id, scenario_type, status, started_at, ends_at FROM run_status WHERE run_id=%s LIMIT 1",
+        (run_id,)
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not row:
+        return jsonify({"run_id": run_id, "status": "UNKNOWN"})
+    return jsonify({
+        "run_id": row[0],
+        "scenario_type": row[1],
+        "status": row[2],
+        "started_at": row[3].isoformat() if row[3] else None,
+        "ends_at": row[4].isoformat() if row[4] else None
+    })
+
+
+@app.route("/metrics/run_quality/<run_id>", methods=["GET"])
+def get_run_quality(run_id):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT scenario_type, status, started_at, ends_at FROM run_status WHERE run_id=%s LIMIT 1",
+            (run_id,)
+        )
+        rs = cur.fetchone()
+
+        cur.execute("SELECT COUNT(*) FROM metrics WHERE run_id=%s", (run_id,))
+        metrics_count = int(cur.fetchone()[0] or 0)
+
+        cur.execute("SELECT COUNT(*) FROM cpu_metrics WHERE run_id=%s", (run_id,))
+        cpu_points = int(cur.fetchone()[0] or 0)
+
+        cur.execute("SELECT COUNT(*) FROM ram_metrics WHERE run_id=%s", (run_id,))
+        ram_points = int(cur.fetchone()[0] or 0)
+
+        cur.execute("SELECT COUNT(*) FROM saturation_metrics WHERE run_id=%s", (run_id,))
+        sat_points = int(cur.fetchone()[0] or 0)
+
+        cur.execute(
+            """
+            SELECT
+                EXTRACT(EPOCH FROM (MAX(timestamp) - MIN(timestamp)))
+            FROM metrics
+            WHERE run_id=%s
+            """,
+            (run_id,)
+        )
+        metric_duration_sec = cur.fetchone()[0]
+        metric_duration_sec = float(metric_duration_sec) if metric_duration_sec is not None else None
+
+        run_kind = "saturation" if sat_points > 0 else "normal"
+        scenario_type = rs[0] if rs else None
+        status = rs[1] if rs else "UNKNOWN"
+        started_at = rs[2] if rs else None
+        ends_at = rs[3] if rs else None
+
+        status_duration_sec = None
+        if started_at and ends_at:
+            status_duration_sec = float((ends_at - started_at).total_seconds())
+
+        duration_sec = metric_duration_sec if metric_duration_sec is not None else status_duration_sec
+
+        missing = []
+        if metrics_count == 0:
+            missing.append("metrics")
+        if cpu_points == 0:
+            missing.append("cpu")
+        if ram_points == 0:
+            missing.append("ram")
+        if run_kind == "saturation" and sat_points == 0:
+            missing.append("saturation")
+
+        return jsonify({
+            "run_id": run_id,
+            "scenario_type": scenario_type,
+            "status": status,
+            "run_kind": run_kind,
+            "duration_sec": duration_sec,
+            "metrics_count": metrics_count,
+            "cpu_points": cpu_points,
+            "ram_points": ram_points,
+            "saturation_points": sat_points,
+            "is_complete": len(missing) == 0,
+            "missing": missing
+        })
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/metrics/saturation/<run_id>", methods=["GET"])
+def get_saturation_series(run_id):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            sm.stage_idx,
+            sm.threads_count,
+            sm.stage_duration_sec,
+            sm.requests_count,
+            sm.qps,
+            sm.avg_latency_ms,
+            sm.p95_latency_ms,
+            sm.p99_latency_ms,
+            sm.stop_reason,
+            (
+                SELECT AVG(cm.cpu_percent)
+                FROM cpu_metrics cm
+                WHERE cm.run_id = sm.run_id
+                  AND cm.timestamp > sm.created_at - ((sm.stage_duration_sec || ' seconds')::interval)
+                  AND cm.timestamp <= sm.created_at
+            ) AS avg_cpu_percent,
+            (
+                SELECT MAX(cm.cpu_percent)
+                FROM cpu_metrics cm
+                WHERE cm.run_id = sm.run_id
+                  AND cm.timestamp > sm.created_at - ((sm.stage_duration_sec || ' seconds')::interval)
+                  AND cm.timestamp <= sm.created_at
+            ) AS peak_cpu_percent
+        FROM saturation_metrics sm
+        WHERE sm.run_id=%s
+        ORDER BY sm.stage_idx
+        """,
+        (run_id,)
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    data = [
+        {
+            "stage_idx": int(r[0]),
+            "threads": int(r[1]),
+            "duration_sec": int(r[2]),
+            "requests": int(r[3]),
+            "qps": float(r[4]),
+            "avg_latency_ms": float(r[5]),
+            "p95_latency_ms": float(r[6]),
+            "p99_latency_ms": float(r[7]),
+            "stop_reason": r[8],
+            "avg_cpu_percent": float(r[9]) if r[9] is not None else 0.0,
+            "peak_cpu_percent": float(r[10]) if r[10] is not None else 0.0,
+        }
+        for r in rows
+    ]
+    return jsonify(data)
+
+
+@app.route("/metrics/repeatability/<scenario>", methods=["GET"])
+def get_repeatability(scenario):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            WITH run_list AS (
+                SELECT DISTINCT run_id
+                FROM metrics
+                WHERE scenario_type=%s
+                ORDER BY run_id DESC
+                LIMIT 3
+            ),
+            run_stats AS (
+                SELECT
+                    rl.run_id,
+                    AVG(m.duration_ms) AS avg_latency_ms,
+                    PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY m.duration_ms) AS p95_latency_ms,
+                    PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY m.duration_ms) AS p99_latency_ms
+                FROM run_list rl
+                JOIN metrics m ON m.run_id = rl.run_id
+                GROUP BY rl.run_id
+            ),
+            qps_stats AS (
+                SELECT
+                    x.run_id,
+                    AVG(x.per_sec)::float AS qps
+                FROM (
+                    SELECT
+                        m.run_id,
+                        date_trunc('second', m.timestamp) AS sec_ts,
+                        COUNT(*)::float AS per_sec
+                    FROM metrics m
+                    JOIN run_list rl ON rl.run_id = m.run_id
+                    GROUP BY m.run_id, sec_ts
+                ) x
+                GROUP BY x.run_id
+            ),
+            cpu_stats AS (
+                SELECT
+                    rl.run_id,
+                    AVG(cm.cpu_percent) AS avg_cpu_percent
+                FROM run_list rl
+                LEFT JOIN cpu_metrics cm ON cm.run_id = rl.run_id
+                GROUP BY rl.run_id
+            ),
+            merged AS (
+                SELECT
+                    rs.run_id,
+                    rs.avg_latency_ms,
+                    rs.p95_latency_ms,
+                    rs.p99_latency_ms,
+                    COALESCE(qs.qps, 0) AS qps,
+                    COALESCE(cs.avg_cpu_percent, 0) AS avg_cpu_percent
+                FROM run_stats rs
+                LEFT JOIN qps_stats qs ON qs.run_id = rs.run_id
+                LEFT JOIN cpu_stats cs ON cs.run_id = rs.run_id
+            )
+            SELECT
+                run_id,
+                avg_latency_ms,
+                p95_latency_ms,
+                p99_latency_ms,
+                qps,
+                avg_cpu_percent
+            FROM merged
+            ORDER BY run_id DESC
+            """,
+            (scenario,)
+        )
+        rows = cur.fetchall()
+        runs = [
+            {
+                "run_id": r[0],
+                "avg_latency_ms": float(r[1]) if r[1] is not None else 0.0,
+                "p95_latency_ms": float(r[2]) if r[2] is not None else 0.0,
+                "p99_latency_ms": float(r[3]) if r[3] is not None else 0.0,
+                "qps": float(r[4]) if r[4] is not None else 0.0,
+                "avg_cpu_percent": float(r[5]) if r[5] is not None else 0.0,
+            }
+            for r in rows
+        ]
+
+        def mean_std(items, key):
+            vals = [float(x.get(key, 0) or 0) for x in items]
+            n = len(vals)
+            if n == 0:
+                return {"mean": 0.0, "stddev": 0.0}
+            mean_v = sum(vals) / n
+            var = sum((v - mean_v) ** 2 for v in vals) / n
+            return {"mean": float(mean_v), "stddev": float(var ** 0.5)}
+
+        return jsonify({
+            "scenario": scenario,
+            "runs_count": len(runs),
+            "runs": runs,
+            "avg_latency_ms": mean_std(runs, "avg_latency_ms"),
+            "qps": mean_std(runs, "qps"),
+            "avg_cpu_percent": mean_std(runs, "avg_cpu_percent"),
+        })
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.route("/metrics/data/<run_id>", methods=["GET"])
@@ -288,12 +598,14 @@ def get_metrics_summary(run_id):
             "avg_latency_ms": 0,
             "throughput_qps": 0,
             "p95_latency_ms": 0,
-            "p99_latency_ms": 0
+            "p99_latency_ms": 0,
+            "efficiency_score": 0
         })
 
     avg_latency_ms, p95_latency_ms, p99_latency_ms = row
     throughput_qps = qps_row[0] if qps_row and qps_row[0] is not None else 0
     avg_cpu, peak_cpu = (cpu_row or (None, None))
+    efficiency_score = (float(throughput_qps) / float(avg_cpu)) if avg_cpu not in (None, 0) else 0
 
     warmup_seconds = compute_warmup_seconds(qps_series)
     scenario_type = scenario_row[0] if scenario_row else None
@@ -306,6 +618,7 @@ def get_metrics_summary(run_id):
         "p99_latency_ms": float(p99_latency_ms) if p99_latency_ms is not None else 0,
         "avg_cpu_percent": float(avg_cpu) if avg_cpu is not None else 0,
         "peak_cpu_percent": float(peak_cpu) if peak_cpu is not None else 0,
+        "efficiency_score": float(efficiency_score),
         "warmup_seconds": warmup_seconds,
         "warmup_label": warmup_label
     })
@@ -623,7 +936,8 @@ def get_metrics_summary_full(run_id):
             "peak_cpu_percent": 0,
             "avg_ram_mb": 0,
             "peak_ram_mb": 0,
-            "hit_ratio": 0
+            "hit_ratio": 0,
+            "efficiency_score": 0
         })
 
     avg_latency_ms, p95_latency_ms, p99_latency_ms = row
@@ -631,6 +945,7 @@ def get_metrics_summary_full(run_id):
     avg_cpu, peak_cpu = (cpu_row or (None, None))
     avg_ram, peak_ram = (ram_row or (None, None))
     hit_ratio = cache_row[2] if cache_row and cache_row[2] is not None else 0
+    efficiency_score = (float(throughput_qps) / float(avg_cpu)) if avg_cpu not in (None, 0) else 0
 
     return jsonify({
         "avg_latency_ms": float(avg_latency_ms) if avg_latency_ms is not None else 0,
@@ -641,7 +956,8 @@ def get_metrics_summary_full(run_id):
         "peak_cpu_percent": float(peak_cpu) if peak_cpu is not None else 0,
         "avg_ram_mb": float(avg_ram) if avg_ram is not None else 0,
         "peak_ram_mb": float(peak_ram) if peak_ram is not None else 0,
-        "hit_ratio": float(hit_ratio)
+        "hit_ratio": float(hit_ratio),
+        "efficiency_score": float(efficiency_score)
     })
 
 

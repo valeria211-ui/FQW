@@ -16,6 +16,10 @@ psql_exec() {
     psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "$1"
 }
 
+# Old schemas may have cpu_percent as NUMERIC(5,2), which overflows on multi-core hosts.
+psql_exec "ALTER TABLE cpu_metrics ALTER COLUMN cpu_percent TYPE NUMERIC(7,2);" >/dev/null 2>&1 || true
+psql_exec "ALTER TABLE ram_metrics ALTER COLUMN ram_mb TYPE NUMERIC(10,2);" >/dev/null 2>&1 || true
+
 while true; do
   run_id=$(psql_exec "SELECT run_id FROM run_status WHERE status='RUNNING' ORDER BY started_at DESC LIMIT 1;")
   scenario=$(psql_exec "SELECT scenario_type FROM run_status WHERE status='RUNNING' ORDER BY started_at DESC LIMIT 1;")

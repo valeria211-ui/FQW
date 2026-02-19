@@ -331,6 +331,67 @@ body[data-theme="light"] .phase-card {
   gap: 6px;
 }
 
+.saturation-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.fold-section {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 8px 10px;
+  background: var(--bg-card);
+}
+
+.fold-title {
+  cursor: pointer;
+  color: var(--text-strong);
+  font-weight: 700;
+  padding: 6px 4px 10px 4px;
+  list-style: none;
+}
+
+.fold-title::-webkit-details-marker {
+  display: none;
+}
+
+.delta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin: 8px 0 14px 0;
+}
+
+.delta-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.delta-good {
+  color: #73d13d;
+}
+
+.delta-bad {
+  color: #ff7875;
+}
+
+.delta-neutral {
+  color: var(--text-soft);
+}
+
+body[data-theme="light"] .delta-good {
+  color: #166534;
+}
+
+body[data-theme="light"] .delta-bad {
+  color: #991b1b;
+}
+
 .scan-badge {
   display: inline-block;
   margin-bottom: 8px;
@@ -497,6 +558,26 @@ body[data-theme="light"] .recharts-legend-item-text {
   border-radius: 10px;
   font-weight: bold;
   cursor: pointer;
+  transition: transform 0.08s ease, filter 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 6px 14px rgba(100, 108, 255, 0.25);
+}
+
+.scenario-run-btn:hover {
+  filter: brightness(1.04);
+}
+
+.scenario-run-btn:active {
+  transform: translateY(1px) scale(0.995);
+}
+
+.scenario-run-btn.loading {
+  opacity: 0.85;
+  cursor: wait;
+}
+
+.scenario-run-btn:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
 }
 
 .scenario-metrics-btn {
@@ -508,6 +589,25 @@ body[data-theme="light"] .recharts-legend-item-text {
   border-radius: 8px;
   font-weight: bold;
   cursor: pointer;
+  transition: transform 0.08s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.scenario-metrics-btn:hover {
+  background-color: rgba(100, 108, 255, 0.22);
+}
+
+.scenario-metrics-btn:active {
+  transform: translateY(1px) scale(0.995);
+}
+
+.scenario-metrics-btn.loading {
+  opacity: 0.85;
+  cursor: wait;
+}
+
+.scenario-metrics-btn:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
 }
 
 .scenario-status {

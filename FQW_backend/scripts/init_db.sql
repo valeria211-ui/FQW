@@ -102,3 +102,20 @@ CREATE TABLE IF NOT EXISTS query_plans (
     query_name VARCHAR(100) NOT NULL,
     plan_json JSONB NOT NULL
 );
+
+-- Метрики стресс-теста насыщения (threads -> qps/latency)
+CREATE TABLE IF NOT EXISTS saturation_metrics (
+    sat_id SERIAL PRIMARY KEY,
+    created_at TIMESTAMP DEFAULT NOW(),
+    run_id VARCHAR(50) NOT NULL,
+    scenario_type VARCHAR(50) NOT NULL,
+    stage_idx INT NOT NULL,
+    threads_count INT NOT NULL,
+    stage_duration_sec INT NOT NULL,
+    requests_count INT NOT NULL,
+    qps NUMERIC(12,4) NOT NULL,
+    avg_latency_ms NUMERIC(12,4) NOT NULL,
+    p95_latency_ms NUMERIC(12,4) NOT NULL,
+    p99_latency_ms NUMERIC(12,4) NOT NULL,
+    stop_reason VARCHAR(200)
+);

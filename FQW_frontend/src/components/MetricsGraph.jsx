@@ -4,8 +4,9 @@ import {
   ResponsiveContainer, Legend, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, ReferenceArea
 } from 'recharts';
 import { exportSummaryCSV, exportSummaryPDF } from "../utils/reportExport";
+import { SaturationCharts } from "./SaturationCharts";
 
-export const MetricsGraph = ({ chartData, percentileData, summary, qpsSeries, cpuSeries, ramSeries, cacheSummary, comparisonSummaries, activeScenario, sideBySideData }) => {
+export const MetricsGraph = ({ chartData, percentileData, summary, qpsSeries, cpuSeries, ramSeries, saturationSeries, isSaturationRun, activeRunQuality, cacheSummary, comparisonSummaries, activeScenario, sideBySideData, repeatabilityData }) => {
     const theme = {
         grid: "var(--border)",
         text: "var(--text-muted)",
@@ -86,6 +87,7 @@ export const MetricsGraph = ({ chartData, percentileData, summary, qpsSeries, cp
         qps: d.throughput_qps || 0,
         avg_cpu: d.avg_cpu_percent || 0,
         peak_cpu: d.peak_cpu_percent || 0,
+        efficiency_score: d.efficiency_score || 0,
         avg_ram: d.avg_ram_mb || 0,
         hit_ratio: d.hit_ratio || 0
     })), [comparisonSummaries]);
@@ -106,53 +108,260 @@ export const MetricsGraph = ({ chartData, percentileData, summary, qpsSeries, cp
         return data;
     }, [sideBySideData]);
 
+    const sideBySideDelta = useMemo(() => {
+        const left = sideBySideData?.left?.summary || {};
+        const right = sideBySideData?.right?.summary || {};
+        if (!Object.keys(left).length || !Object.keys(right).length) return null;
+
+        const pct = (a, b) => {
+            const base = Number(a || 0);
+            const next = Number(b || 0);
+            if (base === 0) return 0;
+            return ((next - base) / base) * 100;
+        };
+        const fmt = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+        const cls = (v, higherIsBetter = true) => {
+            if (v === 0) return "delta-neutral";
+            const improved = higherIsBetter ? v > 0 : v < 0;
+            return improved ? "delta-good" : "delta-bad";
+        };
+
+        const qpsDelta = pct(left.throughput_qps, right.throughput_qps);
+        const avgLatencyDelta = pct(left.avg_latency_ms, right.avg_latency_ms);
+        const p95Delta = pct(left.p95_latency_ms, right.p95_latency_ms);
+        const p99Delta = pct(left.p99_latency_ms, right.p99_latency_ms);
+        const cpuDelta = pct(left.avg_cpu_percent, right.avg_cpu_percent);
+        const efficiencyDelta = pct(left.efficiency_score, right.efficiency_score);
+
+        return {
+            qps: { text: fmt(qpsDelta), className: cls(qpsDelta, true) },
+            avg_latency: { text: fmt(avgLatencyDelta), className: cls(avgLatencyDelta, false) },
+            p95: { text: fmt(p95Delta), className: cls(p95Delta, false) },
+            p99: { text: fmt(p99Delta), className: cls(p99Delta, false) },
+            avg_cpu: { text: fmt(cpuDelta), className: cls(cpuDelta, false) },
+            efficiency: { text: fmt(efficiencyDelta), className: cls(efficiencyDelta, true) },
+        };
+    }, [sideBySideData]);
+
+    const sideBySideInsights = useMemo(() => {
+        if (!sideBySideData?.left?.summary || !sideBySideData?.right?.summary) return [];
+        const left = sideBySideData.left.summary;
+        const right = sideBySideData.right.summary;
+        const mk = (metric, a, b, higherIsBetter = true) => {
+            const base = Number(a || 0);
+            const next = Number(b || 0);
+            if (!base) return null;
+            const deltaPct = ((next - base) / base) * 100;
+            const improved = higherIsBetter ? deltaPct > 0 : deltaPct < 0;
+            return {
+                metric,
+                runA: base,
+                runB: next,
+                deltaPct,
+                verdict: improved ? "Улучшение" : "Ухудшение"
+            };
+        };
+        return [
+            mk("QPS", left.throughput_qps, right.throughput_qps, true),
+            mk("Avg Latency (ms)", left.avg_latency_ms, right.avg_latency_ms, false),
+            mk("p95 (ms)", left.p95_latency_ms, right.p95_latency_ms, false),
+            mk("p99 (ms)", left.p99_latency_ms, right.p99_latency_ms, false),
+            mk("Avg CPU (%)", left.avg_cpu_percent, right.avg_cpu_percent, false),
+        ].filter(Boolean);
+    }, [sideBySideData]);
+
+    const sideBySideWarnings = useMemo(() => {
+        const leftQ = sideBySideData?.left?.quality;
+        const rightQ = sideBySideData?.right?.quality;
+        if (!leftQ || !rightQ) return [];
+        const warnings = [];
+        if (!leftQ.is_complete || !rightQ.is_complete) {
+            warnings.push("Данные неполные: отсутствуют CPU/RAM/метрики для одного из run_id.");
+        }
+        if (leftQ.run_kind !== rightQ.run_kind) {
+            warnings.push("Сравниваются разные типы запусков (normal vs saturation).");
+        }
+        const ld = Number(leftQ.duration_sec || 0);
+        const rd = Number(rightQ.duration_sec || 0);
+        if (ld > 0 && rd > 0) {
+            const diffRatio = Math.abs(ld - rd) / Math.max(ld, rd);
+            if (diffRatio > 0.1) {
+                warnings.push(`Разная длительность запусков: ${ld.toFixed(0)}s vs ${rd.toFixed(0)}s.`);
+            }
+        }
+        return warnings;
+    }, [sideBySideData]);
+
+    if (isSaturationRun) {
+        return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                    <button className="history-btn" onClick={() => exportSummaryCSV(summary, comparisonRows, saturationSeries, sideBySideInsights)}>
+                        Export CSV
+                    </button>
+                    <button className="history-btn" onClick={() => exportSummaryPDF(summary, comparisonRows, saturationSeries, sideBySideInsights)}>
+                        Export PDF
+                    </button>
+                </div>
+                <div className="chart-card">
+                    <h3 className="chart-title">Saturation Analytics</h3>
+                    <p className="chart-subtitle">
+                        Показаны только графики для режима Saturation: зависимость QPS и p95 от числа потоков.
+                    </p>
+                    {!activeRunQuality?.is_complete && (
+                        <p className="chart-subtitle" style={{ color: "#ff7875" }}>
+                            Данные неполные: {Array.isArray(activeRunQuality?.missing) ? activeRunQuality.missing.join(", ") : "проверьте run_id"}.
+                        </p>
+                    )}
+                </div>
+                {Array.isArray(saturationSeries) && saturationSeries.length > 0 ? (
+                    <SaturationCharts saturationSeries={saturationSeries} />
+                ) : (
+                    <div className="chart-card">
+                        <p className="chart-subtitle">Для этого run_id нет сохраненных saturation stage-метрик.</p>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "30px" }}>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
                 <button
                     className="history-btn"
-                    onClick={() => exportSummaryCSV(summary, comparisonRows)}
+                    onClick={() => exportSummaryCSV(summary, comparisonRows, saturationSeries, sideBySideInsights)}
                 >
                     Export CSV
                 </button>
                 <button
                     className="history-btn"
-                    onClick={() => exportSummaryPDF(summary, comparisonRows)}
+                    onClick={() => exportSummaryPDF(summary, comparisonRows, saturationSeries, sideBySideInsights)}
                 >
                     Export PDF
                 </button>
             </div>
-            <div className="section-title">Ресурсы и производительность</div>
-
-            {sideBySideChartData.length > 0 && (
+            {!activeRunQuality?.is_complete && (
                 <div className="chart-card">
-                    <h3 className="chart-title">Side-by-side QPS Overlay</h3>
-                    <p className="chart-subtitle">
-                        Run A: {sideBySideData?.left?.run_id} ({sideBySideData?.left?.scenario}) | Run B: {sideBySideData?.right?.run_id} ({sideBySideData?.right?.scenario})
+                    <h3 className="chart-title">Качество данных</h3>
+                    <p className="chart-subtitle" style={{ color: "#ff7875" }}>
+                        Данные неполные для текущего run_id: {Array.isArray(activeRunQuality?.missing) ? activeRunQuality.missing.join(", ") : "проверьте источники CPU/RAM/saturation"}.
                     </p>
-                    <div style={{ height: "320px", width: "100%" }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={sideBySideChartData}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
-                                <XAxis dataKey="sec" stroke={theme.text} tick={{ fill: theme.text }} />
-                                <YAxis stroke={theme.text} tick={{ fill: theme.text }} />
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: theme.tooltipBg,
-                                        border: `1px solid ${theme.tooltipBorder}`,
-                                        borderRadius: "8px"
-                                    }}
-                                    itemStyle={{ color: theme.title }}
-                                />
-                                <Legend wrapperStyle={{ color: theme.text }} />
-                                <Line type="monotone" dataKey="qps_left" stroke="#69c0ff" strokeWidth={2} dot={false} isAnimationActive={false} name={`Run A (${sideBySideData?.left?.run_id})`} />
-                                <Line type="monotone" dataKey="qps_right" stroke="#ff7875" strokeWidth={2} dot={false} isAnimationActive={false} name={`Run B (${sideBySideData?.right?.run_id})`} />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
                 </div>
             )}
+            {sideBySideChartData.length > 0 && (
+                <details className="fold-section" open>
+                    <summary className="fold-title">Side-by-side Overlay</summary>
+                    <div className="chart-card">
+                        <h3 className="chart-title">Side-by-side QPS Overlay</h3>
+                        <p className="chart-subtitle">
+                            Run A: {sideBySideData?.left?.run_id} ({sideBySideData?.left?.scenario}) | Run B: {sideBySideData?.right?.run_id} ({sideBySideData?.right?.scenario})
+                        </p>
+                        {sideBySideDelta && (
+                            <div className="delta-grid">
+                                <div className="delta-item">QPS <b className={sideBySideDelta.qps.className}>{sideBySideDelta.qps.text}</b></div>
+                                <div className="delta-item">Avg Latency <b className={sideBySideDelta.avg_latency.className}>{sideBySideDelta.avg_latency.text}</b></div>
+                                <div className="delta-item">p95 <b className={sideBySideDelta.p95.className}>{sideBySideDelta.p95.text}</b></div>
+                                <div className="delta-item">p99 <b className={sideBySideDelta.p99.className}>{sideBySideDelta.p99.text}</b></div>
+                                <div className="delta-item">Avg CPU <b className={sideBySideDelta.avg_cpu.className}>{sideBySideDelta.avg_cpu.text}</b></div>
+                                <div className="delta-item">Efficiency <b className={sideBySideDelta.efficiency.className}>{sideBySideDelta.efficiency.text}</b></div>
+                            </div>
+                        )}
+                        {sideBySideWarnings.length > 0 && (
+                            <div style={{ marginBottom: "12px", color: "#ff7875", fontSize: "13px" }}>
+                                {sideBySideWarnings.map((w, i) => <div key={i}>- {w}</div>)}
+                            </div>
+                        )}
+                        <div style={{ height: "320px", width: "100%" }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={sideBySideChartData}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
+                                    <XAxis dataKey="sec" stroke={theme.text} tick={{ fill: theme.text }} />
+                                    <YAxis stroke={theme.text} tick={{ fill: theme.text }} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: theme.tooltipBg,
+                                            border: `1px solid ${theme.tooltipBorder}`,
+                                            borderRadius: "8px"
+                                        }}
+                                        itemStyle={{ color: theme.title }}
+                                    />
+                                    <Legend wrapperStyle={{ color: theme.text }} />
+                                    <Line type="monotone" dataKey="qps_left" stroke="#69c0ff" strokeWidth={2} dot={false} isAnimationActive={false} name={`Run A (${sideBySideData?.left?.run_id})`} />
+                                    <Line type="monotone" dataKey="qps_right" stroke="#ff7875" strokeWidth={2} dot={false} isAnimationActive={false} name={`Run B (${sideBySideData?.right?.run_id})`} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                        {sideBySideInsights.length > 0 && (
+                            <div style={{ marginTop: "14px", overflowX: "auto" }}>
+                                <h4 className="chart-title" style={{ fontSize: "16px", marginBottom: "8px" }}>Итог выводов (Delta %)</h4>
+                                <table className="history-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Метрика</th>
+                                            <th>Run A</th>
+                                            <th>Run B</th>
+                                            <th>Delta %</th>
+                                            <th>Вывод</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {sideBySideInsights.map((x) => (
+                                            <tr key={x.metric}>
+                                                <td>{x.metric}</td>
+                                                <td>{Number(x.runA).toFixed(2)}</td>
+                                                <td>{Number(x.runB).toFixed(2)}</td>
+                                                <td>{x.deltaPct >= 0 ? "+" : ""}{x.deltaPct.toFixed(2)}%</td>
+                                                <td>{x.verdict}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </details>
+            )}
 
+            {Array.isArray(repeatabilityData) && repeatabilityData.length > 0 && (
+                <details className="fold-section" open>
+                    <summary className="fold-title">Повторяемость (последние 3 прогона)</summary>
+                    <div className="chart-card" style={{ overflowX: "auto" }}>
+                        <table className="history-table">
+                            <thead>
+                                <tr>
+                                    <th>Scenario</th>
+                                    <th>Runs</th>
+                                    <th>Avg Latency mean±std</th>
+                                    <th>QPS mean±std</th>
+                                    <th>Avg CPU mean±std</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {repeatabilityData.map((r) => (
+                                    <tr key={r.scenario}>
+                                        <td>{comparisonLabels[r.scenario] || r.scenario}</td>
+                                        <td>{r.runs_count}</td>
+                                        <td>{Number(r.avg_latency_ms?.mean || 0).toFixed(2)} ± {Number(r.avg_latency_ms?.stddev || 0).toFixed(2)}</td>
+                                        <td>{Number(r.qps?.mean || 0).toFixed(2)} ± {Number(r.qps?.stddev || 0).toFixed(2)}</td>
+                                        <td>{Number(r.avg_cpu_percent?.mean || 0).toFixed(2)} ± {Number(r.avg_cpu_percent?.stddev || 0).toFixed(2)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            )}
+
+            {Array.isArray(saturationSeries) && saturationSeries.length > 0 && (
+                <details className="fold-section" open>
+                    <summary className="fold-title">Saturation Анализ</summary>
+                    <SaturationCharts saturationSeries={saturationSeries} />
+                </details>
+            )}
+
+            <details className="fold-section" open>
+            <summary className="fold-title">Ресурсы И Cache</summary>
             {/* QPS */}
             <div className="chart-card">
                 <h3 className="chart-title">QPS во времени (Grafana-style)</h3>
@@ -358,9 +567,10 @@ export const MetricsGraph = ({ chartData, percentileData, summary, qpsSeries, cp
                     </div>
                 </div>
             )}
+            </details>
 
-            <div className="section-title">Задержки</div>
-
+            <details className="fold-section" open>
+            <summary className="fold-title">Задержки</summary>
             {/* LATENCY */}
             <div className="chart-card">
                 <h3 className="chart-title">Задержка (Latency, ms)</h3>
@@ -414,10 +624,11 @@ export const MetricsGraph = ({ chartData, percentileData, summary, qpsSeries, cp
                     </ResponsiveContainer>
                 </div>
             </div>
+            </details>
 
             {comparisonData.length > 0 && (
-                <>
-                    <div className="section-title">Дополнительно: сравнение сценариев (по выбранным run_id)</div>
+                <details className="fold-section">
+                    <summary className="fold-title">Итоговое Сравнение Сценариев</summary>
                     <div className="chart-card">
                         <h3 className="chart-title">QPS по сценариям</h3>
                         <div style={{ height: "300px", width: "100%" }}>
@@ -453,6 +664,7 @@ export const MetricsGraph = ({ chartData, percentileData, summary, qpsSeries, cp
                                         <th>QPS</th>
                                         <th>Avg CPU %</th>
                                         <th>Peak CPU %</th>
+                                        <th>Efficiency</th>
                                         <th>Avg RAM (MB)</th>
                                         <th>Hit Ratio %</th>
                                     </tr>
@@ -467,6 +679,7 @@ export const MetricsGraph = ({ chartData, percentileData, summary, qpsSeries, cp
                                             <td>{row.qps.toFixed(2)}</td>
                                             <td>{row.avg_cpu.toFixed(2)}</td>
                                             <td>{row.peak_cpu.toFixed(2)}</td>
+                                            <td>{row.efficiency_score.toFixed(4)}</td>
                                             <td>{row.avg_ram.toFixed(2)}</td>
                                             <td>{row.hit_ratio.toFixed(2)}</td>
                                         </tr>
@@ -475,7 +688,7 @@ export const MetricsGraph = ({ chartData, percentileData, summary, qpsSeries, cp
                             </table>
                         </div>
                     </div>
-                </>
+                </details>
             )}
         </div>
     );

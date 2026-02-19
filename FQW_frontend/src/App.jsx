@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import { 
   Play, 
@@ -30,6 +30,27 @@ function App() {
     Scenario1: "Не запускалось", Scenario2: "Не запускалось", Scenario3: "Не запускалось",
     Scenario4: "Не запускалось", Scenario5: "Не запускалось",
   });
+  const [isLaunchingByScenario, setIsLaunchingByScenario] = useState({
+    Scenario1: false,
+    Scenario2: false,
+    Scenario3: false,
+    Scenario4: false,
+    Scenario5: false
+  });
+  const [isFetchingMetricsByScenario, setIsFetchingMetricsByScenario] = useState({
+    Scenario1: false,
+    Scenario2: false,
+    Scenario3: false,
+    Scenario4: false,
+    Scenario5: false
+  });
+  const [startedRunByScenario, setStartedRunByScenario] = useState({
+    Scenario1: "",
+    Scenario2: "",
+    Scenario3: "",
+    Scenario4: "",
+    Scenario5: ""
+  });
   const [availableRuns, setAvailableRuns] = useState({ Scenario1: [], Scenario2: [], Scenario3: [], Scenario4: [], Scenario5: [] });
   const [selectedRunId, setSelectedRunId] = useState({ Scenario1: "", Scenario2: "", Scenario3: "", Scenario4: "", Scenario5: "" });
   const [metrics, setMetrics] = useState([]);
@@ -43,6 +64,12 @@ function App() {
   const [sideBySideLeftRun, setSideBySideLeftRun] = useState("");
   const [sideBySideRightRun, setSideBySideRightRun] = useState("");
   const [sideBySideData, setSideBySideData] = useState(null);
+  const [activeRunQuality, setActiveRunQuality] = useState(null);
+  const [repeatabilityData, setRepeatabilityData] = useState([]);
+  const [saturationRunId, setSaturationRunId] = useState("");
+  const [saturationSeries, setSaturationSeries] = useState([]);
+  const [knownSaturationRunIds, setKnownSaturationRunIds] = useState({});
+  const [isSaturationRunning, setIsSaturationRunning] = useState(false);
   const [explainPlans, setExplainPlans] = useState([]);
   const [isExplainLoading, setIsExplainLoading] = useState(false);
   const [durationSecByScenario, setDurationSecByScenario] = useState({
@@ -51,6 +78,13 @@ function App() {
     Scenario3: 300,
     Scenario4: 300,
     Scenario5: 300
+  });
+  const [runModeByScenario, setRunModeByScenario] = useState({
+    Scenario1: "normal",
+    Scenario2: "normal",
+    Scenario3: "normal",
+    Scenario4: "normal",
+    Scenario5: "normal"
   });
   const [runningUntilByScenario, setRunningUntilByScenario] = useState({
     Scenario1: null,
@@ -63,7 +97,6 @@ function App() {
   const [activeScenario, setActiveScenario] = useState(null);
   const [fullHistory, setFullHistory] = useState([]);
   const [activeTab, setActiveTab] = useState("tests");
-  const isSeriesFetchingRef = useRef(false);
 
   useEffect(() => {
     document.body.setAttribute("data-theme", theme);
@@ -145,15 +178,14 @@ function App() {
   }, [sideBySideRunOptions, sideBySideLeftRun, sideBySideRightRun]);
 
   const fetchSeries = async (run_id) => {
-    if (isSeriesFetchingRef.current) return;
-    isSeriesFetchingRef.current = true;
     try {
-      const [summaryRes, qpsRes, cpuRes, ramRes, cacheRes] = await Promise.all([
+      const [summaryRes, qpsRes, cpuRes, ramRes, cacheRes, saturationRes] = await Promise.all([
         axios.get(`http://127.0.0.1:5050/metrics/summary/${run_id}`),
         axios.get(`http://127.0.0.1:5050/metrics/qps_series/${run_id}`),
         axios.get(`http://127.0.0.1:5050/metrics/cpu_series/${run_id}`),
         axios.get(`http://127.0.0.1:5050/metrics/ram_series/${run_id}`),
-        axios.get(`http://127.0.0.1:5050/metrics/cache_summary/${run_id}`)
+        axios.get(`http://127.0.0.1:5050/metrics/cache_summary/${run_id}`),
+        axios.get(`http://127.0.0.1:5050/metrics/saturation/${run_id}`).catch(() => ({ data: [] }))
       ]);
       let phaseRes = null;
       try {
@@ -166,9 +198,19 @@ function App() {
       setCpuSeries(cpuRes.data || []);
       setRamSeries(ramRes.data || []);
       setCacheSummary(cacheRes.data || null);
+      setSaturationSeries(saturationRes.data || []);
+      if (Array.isArray(saturationRes.data) && saturationRes.data.length > 0) {
+        setKnownSaturationRunIds((prev) => ({ ...prev, [run_id]: true }));
+      }
+      try {
+        const qualityRes = await axios.get(`http://127.0.0.1:5050/metrics/run_quality/${run_id}`);
+        setActiveRunQuality(qualityRes.data || null);
+      } catch (_) {
+        setActiveRunQuality(null);
+      }
       setPhaseSummary(phaseRes?.data || null);
-    } finally {
-      isSeriesFetchingRef.current = false;
+    } catch (error) {
+      console.error("Ошибка загрузки серий:", error);
     }
   };
 
@@ -214,11 +256,13 @@ function App() {
       return;
     }
     try {
-      const [leftSummaryRes, rightSummaryRes, leftQpsRes, rightQpsRes] = await Promise.all([
+      const [leftSummaryRes, rightSummaryRes, leftQpsRes, rightQpsRes, leftQualityRes, rightQualityRes] = await Promise.all([
         axios.get(`http://127.0.0.1:5050/metrics/summary/${leftRun}`),
         axios.get(`http://127.0.0.1:5050/metrics/summary/${rightRun}`),
         axios.get(`http://127.0.0.1:5050/metrics/qps_series/${leftRun}`),
-        axios.get(`http://127.0.0.1:5050/metrics/qps_series/${rightRun}`)
+        axios.get(`http://127.0.0.1:5050/metrics/qps_series/${rightRun}`),
+        axios.get(`http://127.0.0.1:5050/metrics/run_quality/${leftRun}`).catch(() => ({ data: null })),
+        axios.get(`http://127.0.0.1:5050/metrics/run_quality/${rightRun}`).catch(() => ({ data: null }))
       ]);
       const leftScenario = runScenarioMap[leftRun] || "Unknown";
       const rightScenario = runScenarioMap[rightRun] || "Unknown";
@@ -228,14 +272,16 @@ function App() {
           scenario: leftScenario,
           label: `${leftRun} (${leftScenario})`,
           summary: leftSummaryRes.data || {},
-          qps_series: leftQpsRes.data || []
+          qps_series: leftQpsRes.data || [],
+          quality: leftQualityRes.data || null
         },
         right: {
           run_id: rightRun,
           scenario: rightScenario,
           label: `${rightRun} (${rightScenario})`,
           summary: rightSummaryRes.data || {},
-          qps_series: rightQpsRes.data || []
+          qps_series: rightQpsRes.data || [],
+          quality: rightQualityRes.data || null
         }
       });
     } catch (e) {
@@ -244,9 +290,26 @@ function App() {
     }
   };
 
+  const fetchSaturationData = async (runId) => {
+    if (!runId) return;
+    try {
+      const [seriesRes, statusRes] = await Promise.all([
+        axios.get(`http://127.0.0.1:5050/metrics/saturation/${runId}`),
+        axios.get(`http://127.0.0.1:5050/metrics/run_status/${runId}`)
+      ]);
+      setSaturationSeries(seriesRes.data || []);
+      setIsSaturationRunning((statusRes.data?.status || "") === "RUNNING");
+    } catch (_) {
+      setSaturationSeries([]);
+      setIsSaturationRunning(false);
+    }
+  };
+
   const fetchMetrics = async (scenario, forcedId = null) => {
     const run_id = forcedId || selectedRunId[scenario];
     if (!run_id) return alert("Выберите ID!");
+    setActiveTab("graphs");
+    setIsFetchingMetricsByScenario((prev) => ({ ...prev, [scenario]: true }));
     try {
       const response = await axios.get(`http://127.0.0.1:5050/metrics/data/${run_id}`);
       setMetrics(response.data.map(m => ({ ...m, scenario_type: scenario })));
@@ -256,6 +319,8 @@ function App() {
       await fetchComparisonSummaries();
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsFetchingMetricsByScenario((prev) => ({ ...prev, [scenario]: false }));
     }
   };
 
@@ -284,18 +349,40 @@ function App() {
     fetchMetrics(technicalName, runId); 
   };
 
-  const runLoadTest = async (scenario, durationSec) => {
+  const runExperiment = async (scenario, durationSec, mode = "normal") => {
+    const isSaturationMode = mode === "saturation" && ["Scenario1", "Scenario2", "Scenario3"].includes(scenario);
+    setIsLaunchingByScenario((prev) => ({ ...prev, [scenario]: true }));
     setStatus((prev) => ({ ...prev, [scenario]: "Запуск..." }));
     try {
-      const response = await axios.post(`http://127.0.0.1:5050/run_load_test/${scenario}`, {
-        duration_sec: durationSec
-      });
+      let response;
+      if (isSaturationMode) {
+        setSaturationSeries([]);
+        setIsSaturationRunning(true);
+        response = await axios.post(`http://127.0.0.1:5050/run_saturation_test/${scenario}`, {
+          stage_duration_sec: 30,
+          thread_steps: [10, 20, 40, 80, 120],
+          latency_multiplier: 2.0
+        });
+      } else {
+        response = await axios.post(`http://127.0.0.1:5050/run_load_test/${scenario}`, {
+          duration_sec: durationSec
+        });
+      }
       const newRunId = response.data.run_id;
-      setStatus((prev) => ({ ...prev, [scenario]: `ID: ${newRunId}` }));
+      setStatus((prev) => ({
+        ...prev,
+        [scenario]: `${isSaturationMode ? "Saturation" : "Load"} RUNNING: ${newRunId}`
+      }));
+      setStartedRunByScenario((prev) => ({ ...prev, [scenario]: newRunId }));
       setAvailableRuns(prev => ({ ...prev, [scenario]: [newRunId, ...prev[scenario]] }));
       setSelectedRunId(prev => ({ ...prev, [scenario]: newRunId }));
       setActiveScenario(scenario);
-      if (durationSec) {
+      if (isSaturationMode) {
+        setSaturationRunId(newRunId);
+        setKnownSaturationRunIds((prev) => ({ ...prev, [newRunId]: true }));
+        fetchSaturationData(newRunId);
+        setRunningUntilByScenario(prev => ({ ...prev, [scenario]: null }));
+      } else if (durationSec) {
         setRunningUntilByScenario(prev => ({
           ...prev,
           [scenario]: Date.now() + durationSec * 1000
@@ -304,6 +391,9 @@ function App() {
       setTimeout(() => fetchAvailableRuns(scenario), 2000);
     } catch (error) {
       setStatus((prev) => ({ ...prev, [scenario]: "Ошибка" }));
+      if (isSaturationMode) setIsSaturationRunning(false);
+    } finally {
+      setIsLaunchingByScenario((prev) => ({ ...prev, [scenario]: false }));
     }
   };
 
@@ -330,9 +420,55 @@ function App() {
   }, [activeTab, sideBySideLeftRun, sideBySideRightRun, runScenarioMap]);
 
   useEffect(() => {
+    if (activeTab !== "graphs") return;
+    const targetScenarios = ["Scenario1", "Scenario2", "Scenario3", "Scenario4", "Scenario5"];
+    Promise.all(
+      targetScenarios.map((sc) =>
+        axios
+          .get(`http://127.0.0.1:5050/metrics/repeatability/${sc}`)
+          .then((r) => r.data)
+          .catch(() => null)
+      )
+    ).then((rows) => setRepeatabilityData(rows.filter(Boolean)));
+  }, [activeTab, availableRuns]);
+
+  useEffect(() => {
+    if (!saturationRunId || !isSaturationRunning) return;
+    const interval = setInterval(() => {
+      fetchSaturationData(saturationRunId).catch(() => {});
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [saturationRunId, isSaturationRunning]);
+
+  useEffect(() => {
     const interval = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const tasks = scenarios
+        .map((sc) => ({ sc, runId: startedRunByScenario[sc] }))
+        .filter((x) => Boolean(x.runId));
+      if (tasks.length === 0) return;
+      await Promise.all(
+        tasks.map(async ({ sc, runId }) => {
+          try {
+            const res = await axios.get(`http://127.0.0.1:5050/metrics/run_status/${runId}`);
+            const st = res.data?.status || "UNKNOWN";
+            setStatus((prev) => {
+              const current = prev[sc] || "";
+              const isSat = current.includes("Saturation") || runModeByScenario[sc] === "saturation";
+              if (st === "RUNNING") return { ...prev, [sc]: `${isSat ? "Saturation" : "Load"} RUNNING: ${runId}` };
+              if (st === "FINISHED") return { ...prev, [sc]: `${isSat ? "Saturation" : "Load"} FINISHED: ${runId}` };
+              return { ...prev, [sc]: `${isSat ? "Saturation" : "Load"} ${st}: ${runId}` };
+            });
+          } catch (_) {}
+        })
+      );
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [startedRunByScenario, runModeByScenario]);
 
   const chartData = useMemo(() => {
     const grouped = metrics.reduce((acc, m) => {
@@ -396,7 +532,7 @@ function App() {
                     key={sc}
                     availableRuns={availableRuns}
                     setSelectedRunId={setSelectedRunId}
-                    runLoadTest={runLoadTest}
+                    runExperiment={runExperiment}
                     fetchMetrics={fetchMetrics}
                     status={status}
                     sc={sc}
@@ -406,6 +542,10 @@ function App() {
                     scenarioLabels={scenarioLabels}
                     runningUntilByScenario={runningUntilByScenario}
                     nowTick={nowTick}
+                    runModeByScenario={runModeByScenario}
+                    setRunModeByScenario={setRunModeByScenario}
+                    isLaunching={Boolean(isLaunchingByScenario[sc])}
+                    isFetchingMetrics={Boolean(isFetchingMetricsByScenario[sc])}
                   />
                 ))}
               </div>
@@ -457,10 +597,18 @@ function App() {
                     qpsSeries={qpsSeries}
                     cpuSeries={cpuSeries}
                     ramSeries={ramSeries}
+                    saturationSeries={saturationSeries}
+                    isSaturationRun={
+                      runModeByScenario[activeScenario || ""] === "saturation" ||
+                      Boolean(knownSaturationRunIds[selectedRunId[activeScenario || ""]]) ||
+                      (Array.isArray(saturationSeries) && saturationSeries.length > 0)
+                    }
+                    activeRunQuality={activeRunQuality}
                     cacheSummary={cacheSummary}
                     comparisonSummaries={comparisonSummaries}
                     activeScenario={activeScenario}
                     sideBySideData={sideBySideData}
+                    repeatabilityData={repeatabilityData}
                   />
                 </>
               ) : (
